@@ -1,4 +1,7 @@
-import { featureContents } from "@/server/features/keywords/services/research/serpFeatures";
+import {
+  featureContents,
+  GOOGLE_HOST,
+} from "@/server/features/keywords/services/research/serpFeatures";
 import type { SerpLiveItem } from "@/server/lib/dataforseo";
 import {
   SerpHistoryRepository,
@@ -8,7 +11,7 @@ import {
 const TOP_RESULTS = 10;
 const MAX_VALUES_PER_FEATURE = 10;
 const MAX_VALUE_LENGTH = 150;
-const GOOGLE_HOST = /^google\.[a-z.]+$/;
+const MAX_URL_LENGTH = 2000;
 
 type Device = "desktop" | "mobile";
 type PageContent = Pick<SerpPageRows, "results" | "features">;
@@ -36,7 +39,7 @@ function site(domain: string | null | undefined): string | null {
  * business, a featured snippet names its site), or a null value, so its
  * presence stays.
  */
-export function readSerpPage(items: SerpLiveItem[]): PageContent {
+function pageContent(items: SerpLiveItem[]): PageContent {
   const results: PageContent["results"] = [];
   const valuesByType = new Map<
     string,
@@ -52,7 +55,7 @@ export function readSerpPage(items: SerpLiveItem[]): PageContent {
         results.push({
           rank,
           domain: site(item.domain),
-          url: item.url ?? null,
+          url: item.url?.slice(0, MAX_URL_LENGTH) ?? null,
           title: item.title?.slice(0, 300) ?? null,
         });
       }
@@ -86,6 +89,27 @@ export function readSerpPage(items: SerpLiveItem[]): PageContent {
     values.map((entry, sortOrder) => ({ featureType, sortOrder, ...entry })),
   );
   return { results, features };
+}
+
+/**
+ * A read with what its page showed, or null when the page can't be read.
+ * History is a by-product of the check, so a page that breaks the reader is
+ * logged and skipped, never thrown into the step that saves the ranks.
+ */
+export function readSerpPage(
+  runId: string,
+  read: Omit<SerpRead, keyof PageContent>,
+  items: SerpLiveItem[],
+): SerpRead | null {
+  try {
+    return { ...read, ...pageContent(items) };
+  } catch (error) {
+    console.error(
+      `[rank-check] ${runId} SERP history read failed for ${read.keywordId}:${read.device}:`,
+      error,
+    );
+    return null;
+  }
 }
 
 /**

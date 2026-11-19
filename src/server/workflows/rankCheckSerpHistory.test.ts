@@ -65,7 +65,7 @@ const organic = (rank: number, domain: string) => ({
 });
 
 /** The next task_get answers with this page and the site's position on it. */
-function nextRead(position: number | null, items: object[]) {
+function nextRead(position: number | null, items: object[] | null) {
   fetchRankCheckTaskResult.mockImplementationOnce(
     async (task: { keywordId: string; keyword: string }) => ({
       status: "completed",
@@ -134,6 +134,16 @@ describe("SERP history of a rank check", () => {
           { domain: "openseo.so", title: "Kavanoz rehberi" },
           { domain: "google.com", url: "https://www.google.com/x" },
         ],
+        // Sources on a nested element count too; a bare URL names its site.
+        items: [
+          {
+            type: "ai_overview_element",
+            references: [
+              { url: "https://www.nested.example/a", title: "Nested" },
+              { url: "https://maps.google.com/x", title: "Map" },
+            ],
+          },
+        ],
       },
       { type: "local_pack", title: "Kavanozcu", domain: "kavanozcu.com" },
     ]);
@@ -143,6 +153,8 @@ describe("SERP history of a rank check", () => {
       top10: ["rival.com", "openseo.so"],
       features: [
         ["ai_overview", "openseo.so: Kavanoz rehberi", "openseo.so"],
+        ["ai_overview", "nested.example: Nested", "nested.example"],
+        ["ai_overview", "Map", null],
         ["local_pack", "Kavanozcu", "kavanozcu.com"],
       ],
     });
@@ -156,5 +168,31 @@ describe("SERP history of a rank check", () => {
     await retryRankChecks(step, ctx, "config", Infinity);
 
     expect(await savedPage()).toEqual({ top10: [], features: [] });
+  });
+
+  // Last: the second case drops a table this file's database doesn't get back.
+  it.each([
+    ["a page it can't read", async () => nextRead(5, null)],
+    [
+      "a database error",
+      async () => {
+        await testDb.client.execute("DROP TABLE serp_snapshot_features");
+        nextRead(5, [organic(1, "rival.com"), organic(5, "openseo.so")]);
+      },
+    ],
+  ])("still saves the ranks after %s", async (_case, arrange) => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    await arrange();
+
+    await runQueuedCheck(step, ctx, Infinity);
+
+    const ranks = await testDb.client.execute(
+      "SELECT position FROM rank_snapshots WHERE run_id = 'run'",
+    );
+    expect(ranks.rows.map((row) => row.position)).toEqual([5]);
+    expect(logged).toHaveBeenCalledWith(
+      expect.stringContaining("SERP history"),
+      expect.anything(),
+    );
   });
 });

@@ -6,7 +6,7 @@ import {
   serpSnapshotFeatures,
   serpSnapshotResults,
 } from "@/db/schema";
-import { runBatch } from "@/db/runBatch";
+import { DB_BATCH_SIZE, runBatch } from "@/db/runBatch";
 
 type Device = "desktop" | "mobile";
 
@@ -30,8 +30,11 @@ export type SerpPageRows = {
 // D1 binds at most 100 parameters per statement and both tables have 7
 // columns, so one insert carries at most 14 rows.
 const ROWS_PER_INSERT = 14;
-// A page is at most ~6 statements, so this keeps a batch well under 100.
-const PAGES_PER_BATCH = 10;
+// Statements per batch, like executeInBatches. A page's statements always go
+// in the same batch, so it closes once the next page would pass this.
+const STATEMENTS_PER_BATCH = DB_BATCH_SIZE;
+// Completed checks a comparison looks through: years of daily checks.
+const MAX_RUNS = 1000;
 
 function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -53,58 +56,92 @@ function pairFilter(
   );
 }
 
+type BatchExecutor = Parameters<Parameters<typeof runBatch>[0]>[0];
+
+/** Clears one pair's page: its results and features. */
+function deleteStatements(
+  tx: BatchExecutor,
+  runId: string,
+  pair: { trackingKeywordId: string; device: Device },
+) {
+  return [
+    tx
+      .delete(serpSnapshotResults)
+      .where(pairFilter(serpSnapshotResults, runId, pair)),
+    tx
+      .delete(serpSnapshotFeatures)
+      .where(pairFilter(serpSnapshotFeatures, runId, pair)),
+  ];
+}
+
 /**
- * Replace the saved page of each keyword/device pair in the run. Each batch
- * deletes and inserts together, so a pair never shows half of two reads.
+ * Run each item's statements, grouping items into batches of at most
+ * STATEMENTS_PER_BATCH statements. An item never spans two batches, so its
+ * delete and inserts are atomic: a pair never shows half of two reads.
  */
-async function replacePages(runId: string, pages: SerpPageRows[]) {
-  for (const group of chunk(pages, PAGES_PER_BATCH)) {
-    await runBatch((tx) =>
-      group.flatMap((page) => {
-        const key = {
-          runId,
-          trackingKeywordId: page.trackingKeywordId,
-          device: page.device,
-        };
-        return [
-          tx
-            .delete(serpSnapshotResults)
-            .where(pairFilter(serpSnapshotResults, runId, page)),
-          tx
-            .delete(serpSnapshotFeatures)
-            .where(pairFilter(serpSnapshotFeatures, runId, page)),
-          ...chunk(page.results, ROWS_PER_INSERT).map((rows) =>
-            tx
-              .insert(serpSnapshotResults)
-              .values(rows.map((row) => ({ ...key, ...row }))),
-          ),
-          ...chunk(page.features, ROWS_PER_INSERT).map((rows) =>
-            tx
-              .insert(serpSnapshotFeatures)
-              .values(rows.map((row) => ({ ...key, ...row }))),
-          ),
-        ];
-      }),
-    );
+async function runGrouped<T>(
+  items: T[],
+  statementCount: (item: T) => number,
+  build: (tx: BatchExecutor, item: T) => Promise<unknown>[],
+) {
+  let group: T[] = [];
+  let count = 0;
+  const flush = async () => {
+    if (group.length === 0) return;
+    const current = group;
+    await runBatch((tx) => current.flatMap((item) => build(tx, item)));
+    group = [];
+    count = 0;
+  };
+  for (const item of items) {
+    const size = statementCount(item);
+    if (count + size > STATEMENTS_PER_BATCH) await flush();
+    group.push(item);
+    count += size;
   }
+  await flush();
+}
+
+/** Replace the saved page of each keyword/device pair in the run. */
+async function replacePages(runId: string, pages: SerpPageRows[]) {
+  await runGrouped(
+    pages,
+    (page) =>
+      2 +
+      Math.ceil(page.results.length / ROWS_PER_INSERT) +
+      Math.ceil(page.features.length / ROWS_PER_INSERT),
+    (tx, page) => {
+      const key = {
+        runId,
+        trackingKeywordId: page.trackingKeywordId,
+        device: page.device,
+      };
+      return [
+        ...deleteStatements(tx, runId, page),
+        ...chunk(page.results, ROWS_PER_INSERT).map((rows) =>
+          tx
+            .insert(serpSnapshotResults)
+            .values(rows.map((row) => ({ ...key, ...row }))),
+        ),
+        ...chunk(page.features, ROWS_PER_INSERT).map((rows) =>
+          tx
+            .insert(serpSnapshotFeatures)
+            .values(rows.map((row) => ({ ...key, ...row }))),
+        ),
+      ];
+    },
+  );
 }
 
 async function deletePages(
   runId: string,
   pairs: Array<{ trackingKeywordId: string; device: Device }>,
 ) {
-  for (const group of chunk(pairs, PAGES_PER_BATCH * 4)) {
-    await runBatch((tx) =>
-      group.flatMap((pair) => [
-        tx
-          .delete(serpSnapshotResults)
-          .where(pairFilter(serpSnapshotResults, runId, pair)),
-        tx
-          .delete(serpSnapshotFeatures)
-          .where(pairFilter(serpSnapshotFeatures, runId, pair)),
-      ]),
-    );
-  }
+  await runGrouped(
+    pairs,
+    () => 2,
+    (tx, pair) => deleteStatements(tx, runId, pair),
+  );
 }
 
 /** The run's saved rank snapshots: which pairs have a result, and where. */
@@ -131,7 +168,8 @@ async function getCompletedRuns(configId: string) {
         eq(rankCheckRuns.isSubsetRun, false),
       ),
     )
-    .orderBy(desc(rankCheckRuns.startedAt));
+    .orderBy(desc(rankCheckRuns.startedAt), desc(rankCheckRuns.id))
+    .limit(MAX_RUNS);
 }
 
 /** One keyword's latest completed checks on a device, newest first. */
@@ -157,7 +195,7 @@ async function getKeywordChecks(input: {
         eq(rankSnapshots.device, input.device),
       ),
     )
-    .orderBy(desc(rankCheckRuns.startedAt))
+    .orderBy(desc(rankCheckRuns.startedAt), desc(rankCheckRuns.id))
     .limit(input.limit);
 }
 

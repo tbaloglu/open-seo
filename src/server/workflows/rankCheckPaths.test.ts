@@ -23,7 +23,7 @@ vi.mock("@/server/lib/dataforseo", () => ({
 }));
 // SERP history has its own test (rankCheckSerpHistory.test.ts).
 vi.mock("@/server/features/serp-history/services/saveSerpHistory", () => ({
-  readSerpPage: () => ({ results: [], features: [] }),
+  readSerpPage: () => null,
   saveSerpHistory: async () => {},
   dropSerpHistory: async () => {},
 }));

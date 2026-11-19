@@ -181,12 +181,16 @@ async function fetchQueuedRound(
         );
       } else {
         completed.push({ ...result.value.result, device: task.device });
-        serpReads.push({
-          keywordId: task.keywordId,
-          device: task.device,
-          position: result.value.result.position,
-          ...readSerpPage(result.value.items),
-        });
+        const serpRead = readSerpPage(
+          ctx.runId,
+          {
+            keywordId: task.keywordId,
+            device: task.device,
+            position: result.value.result.position,
+          },
+          result.value.items,
+        );
+        if (serpRead) serpReads.push(serpRead);
       }
     });
   }

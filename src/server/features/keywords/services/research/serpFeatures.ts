@@ -20,8 +20,22 @@ const featureContentSchema = z.looseObject({
   references: z.array(featureElementSchema).nullish(),
 });
 type FeatureElement = z.infer<typeof featureElementSchema>;
+// An AI Overview's sources can also sit on its nested elements.
+const nestedReferencesSchema = z.looseObject({
+  references: z.array(featureElementSchema).nullish(),
+});
 
-const GOOGLE_HOST = /^google\.[a-z.]+$/;
+/** google.com, google.com.tr, maps.google.com, ... */
+export const GOOGLE_HOST = /(^|\.)google\.[a-z.]+$/;
+
+function urlHost(url: string | null | undefined) {
+  if (!url || !/^https?:\/\//i.test(url)) return undefined;
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * The element's site. A goto-wrapped element says "google.com", so its site
@@ -31,7 +45,7 @@ const GOOGLE_HOST = /^google\.[a-z.]+$/;
 function elementHost(el: Exclude<FeatureElement, string>) {
   const { domain } = unwrapGoogleRedirect({
     url: el.url,
-    domain: el.domain,
+    domain: el.domain || urlHost(el.url),
     website_name: el.source,
   });
   const site = domain?.toLowerCase().replace(/^www\./, "");
@@ -76,7 +90,16 @@ function featureEntries(type: string, item: unknown) {
     case "short_videos":
       return read(items, elementSource);
     case "ai_overview":
-      return read(references, elementSource);
+      return read(
+        [
+          ...(references ?? []),
+          ...(items ?? []).flatMap((el) => {
+            const nested = nestedReferencesSchema.safeParse(el);
+            return nested.success ? (nested.data.references ?? []) : [];
+          }),
+        ],
+        elementSource,
+      );
     default:
       return [];
   }
