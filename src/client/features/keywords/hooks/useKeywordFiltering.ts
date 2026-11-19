@@ -8,6 +8,22 @@ import {
 } from "@/client/features/keywords/keywordResearchTypes";
 import type { SortDir, SortField } from "@/client/features/keywords/components";
 import { groupSharedVolumeRows } from "@/client/features/keywords/groupSharedVolumeRows";
+import { foldedTermSource } from "@/shared/text-match";
+
+/**
+ * Whether a keyword has a word starting with one of the topics, or null with
+ * no topics. Turkish adds suffixes, so "turşu" keeps "Turşusu" and "turşucu";
+ * case and the four i-letters fold, so "ISPARTA" keeps "ısparta".
+ */
+function topicMatcher(value: string) {
+  const topics = parseTerms(value);
+  if (topics.length === 0) return null;
+  const pattern = new RegExp(
+    `(?<![\\p{L}\\p{M}\\p{N}_])(?:${topics.map(foldedTermSource).join("|")})`,
+    "iu",
+  );
+  return (keyword: string) => pattern.test(keyword.normalize("NFD"));
+}
 
 export function applyKeywordFiltersAndSort(params: {
   rows: KeywordResearchRow[];
@@ -18,6 +34,7 @@ export function applyKeywordFiltersAndSort(params: {
   const includeTerms = parseTerms(params.filters.include);
   const excludeTerms = parseTerms(params.filters.exclude);
   const selectedIntents = parseIntentFilter(params.filters.intents);
+  const matchesTopic = topicMatcher(params.filters.topics);
 
   const filtered = params.rows.filter((row) => {
     const haystack = row.keyword.toLowerCase();
@@ -30,6 +47,7 @@ export function applyKeywordFiltersAndSort(params: {
     if (excludeTerms.some((term) => haystack.includes(term))) {
       return false;
     }
+    if (matchesTopic && !matchesTopic(row.keyword)) return false;
 
     if (selectedIntents.length > 0 && !selectedIntents.includes(row.intent)) {
       return false;
@@ -102,6 +120,15 @@ export function useKeywordFiltering(params: {
     params.sortField,
   ]);
 
+  // The topic filter can drop most of a blended result set, so the page says
+  // how many rows it hid on its own.
+  const topicHiddenCount = useMemo(() => {
+    const matchesTopic = topicMatcher(params.filters.topics);
+    return matchesTopic
+      ? params.rows.filter((row) => !matchesTopic(row.keyword)).length
+      : 0;
+  }, [params.filters.topics, params.rows]);
+
   const activeFilterCount = useMemo(
     () =>
       Object.values(params.filters).filter((value) => value.trim() !== "")
@@ -112,5 +139,6 @@ export function useKeywordFiltering(params: {
   return {
     filteredRows,
     activeFilterCount,
+    topicHiddenCount,
   };
 }

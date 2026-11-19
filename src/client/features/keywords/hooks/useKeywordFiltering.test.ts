@@ -74,3 +74,25 @@ describe("applyKeywordFiltersAndSort — intent filtering", () => {
     expect(filter(rows, { intents: "bogus" })).toHaveLength(rows.length);
   });
 });
+
+describe("applyKeywordFiltersAndSort — topic words", () => {
+  it("keeps keywords with a word starting with any topic, folding Turkish case", () => {
+    const keywords = [
+      "AFYON TURŞU",
+      "afyon turşucu",
+      "lahana turşusu",
+      "ısparta kavanoz",
+      "afyon veteriner",
+      "katurşu",
+    ].map((keyword) => makeRow(keyword, "unknown"));
+
+    const kept = filter(keywords, { topics: "turşu, İSPARTA" });
+
+    expect(kept.map((row) => row.keyword)).toEqual([
+      "AFYON TURŞU",
+      "afyon turşucu",
+      "lahana turşusu",
+      "ısparta kavanoz",
+    ]);
+  });
+});

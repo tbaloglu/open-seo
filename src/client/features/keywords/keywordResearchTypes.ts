@@ -11,6 +11,11 @@ export type KeywordMode = "auto" | KeywordSource;
 export type KeywordFilterValues = {
   include: string;
   exclude: string;
+  /**
+   * The project's topic words, comma-separated. A row stays when a word in it
+   * starts with any of them, so "turşu" keeps "Turşusu" and "turşucu".
+   */
+  topics: string;
   minVol: string;
   maxVol: string;
   minCpc: string;
@@ -30,6 +35,7 @@ export type KeywordFilterValues = {
 export const EMPTY_FILTERS: KeywordFilterValues = {
   include: "",
   exclude: "",
+  topics: "",
   minVol: "",
   maxVol: "",
   minCpc: "",

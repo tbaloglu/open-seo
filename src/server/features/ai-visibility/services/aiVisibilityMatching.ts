@@ -5,6 +5,7 @@ import {
   isDefaultProjectName,
   type AiBrand,
 } from "@/shared/ai-visibility";
+import { foldedTermSource } from "@/shared/text-match";
 import type { ParsedAiAnswer } from "../providers/dataforseoEvidence";
 
 export function ownedAiDomain(hostname: string, owned: string): boolean {
@@ -41,14 +42,7 @@ export function aiMentionSpans(
   for (const name of new Set(
     names.map((n) => n.trim()).filter((n) => n.length >= 2),
   )) {
-    const escaped = name
-      .normalize("NFD")
-      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-      .replace(/\s+/g, "\\s+")
-      // The `i` flag folds I to i only. Turkish writes i/İ and ı/I (İ is
-      // I + combining dot after NFD), so "ISPARTA" is "ısparta" and
-      // "İstanbul" is "istanbul": treat every i-letter as the same letter.
-      .replace(/[iIı]\u0307?/g, "[iIı]\\u0307?");
+    const escaped = foldedTermSource(name);
     const pattern = new RegExp(
       `(?<![\\p{L}\\p{M}\\p{N}_])${escaped}(?![\\p{L}\\p{M}\\p{N}_])`,
       "giu",
