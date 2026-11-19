@@ -69,6 +69,15 @@ describe("brand mentions", () => {
     expect(spans[0]).toEqual({ start: 3, end: 7 });
   });
 
+  it("matches Turkish dotted and dotless i in either case", () => {
+    const text = "ısparta, istanbul turşusu ve TURŞUCULAR.";
+    expect(
+      aiMentionSpans(text, ["ISPARTA", "İstanbul Turşusu", "Turşucular"]).map(
+        (s) => text.slice(s.start, s.end),
+      ),
+    ).toEqual(["ısparta", "istanbul turşusu", "TURŞUCULAR"]);
+  });
+
   it("escapes regex syntax and keeps the longest overlapping name", () => {
     const text = "C++ Tools and Open SEO Tools";
     expect(
