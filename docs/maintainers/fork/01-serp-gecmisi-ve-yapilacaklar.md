@@ -156,7 +156,7 @@ OpenSEO'nun kendi tahmin aracı, tekrar okuma ihtimali yüzünden en kötü duru
 
 ### F. Günlük ücretsiz nabız (ek)
 
-GSC ve GA4 verisini Google zaten 16 ay saklıyor, bu yüzden kopyası tutulmaz. Günlük iş yalnızca **uyarı** üretir. Uyarı durumları:
+Günlük iş iki şey yapar: G'deki arşive o günün verisini ekler ve **uyarı** üretir. Uyarı durumları:
 
 - bir sayfanın tıklamaları ya da gösterimleri son 7 günün ortalamasına göre belirgin düştü;
 - daha önce gösterim alan bir sayfa gösterim almaz oldu (Giresun il sayfasında olduğu gibi: dizinden çıkma, noindex);
@@ -164,3 +164,21 @@ GSC ve GA4 verisini Google zaten 16 ay saklıyor, bu yüzden kopyası tutulmaz. 
 - GA4'te organik oturumlar sert düştü.
 
 Uyarılar yapılacaklar listesine "öneri" olarak düşer ve aylık rapora girer. Bu iş sunucuda çalışır, Claude'u her gün çalıştırmaz; yani token maliyeti yok. Aşama sırasında E'den sonra gelir.
+
+### G. GSC ve GA4 arşivi (veritabanı değişir)
+
+Google, Search Console verisini 16 ay saklar; daha eskisi kaybolur. Yıllar arası karşılaştırma (ör. "geçen yılın kışlık turşu sezonu") için kendi arşivimiz gerekir. Sahibinin itirazıyla eklendi (20.11.2026).
+
+Arşivin ayrıntı düzeyi, veri hacmiyle değeri dengeleyecek şekilde seçildi:
+
+- **Günlük, site toplamı:** tıklama, gösterim, ortalama sıra, cihaz kırılımı (GSC); oturum, organik oturum, hedef eylem sayısı (GA4).
+- **Günlük, sayfa bazında:** tıklama, gösterim, ortalama sıra (GSC); organik oturum (GA4).
+- **Aylık, arama × sayfa bazında:** ayın toplam tıklaması, gösterimi ve ortalama sırası (GSC). Günlük arama × sayfa verisi tutulmaz; site başına günde binlerce satır eder ve yıllık karşılaştırmada aylık toplam yeter.
+
+Doldurma: ilk kurulumda GSC'nin elindeki 16 ay ve GA4'ün elindeki dönem bir kez çekilir. Sonra her gün bir önceki günün verisi eklenir. GSC son 2-3 günü sonradan düzelttiği için son 4 gün her çalıştırmada yeniden yazılır. Aylık arama × sayfa toplamı ay bittikten 4 gün sonra yazılır.
+
+Tahmini boyut: 14 site için yılda yaklaşık 1,5 milyon satır (çoğu aylık arama × sayfa). Bu, SQLite ve Postgres için sorun değil.
+
+MCP: `get_search_console_performance` ve GA4 araçları, istenen tarih 16 aydan eskiyse arşivden okur ve cevabında bunu belirtir.
+
+Aşama sırası güncel hâli: 1) A+B, 2) A ekranları, 3) C, 4) D, 5) E, 6) F+G (günlük nabız ve arşiv). Arşiv ne kadar erken başlarsa o kadar çok veri kurtarılır; bu yüzden G'nin doldurma kısmı mümkünse 3. aşamayla birlikte öne alınır.
