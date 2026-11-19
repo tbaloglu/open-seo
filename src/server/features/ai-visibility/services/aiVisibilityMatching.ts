@@ -44,7 +44,11 @@ export function aiMentionSpans(
     const escaped = name
       .normalize("NFD")
       .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-      .replace(/\s+/g, "\\s+");
+      .replace(/\s+/g, "\\s+")
+      // The `i` flag folds I to i only. Turkish writes i/İ and ı/I (İ is
+      // I + combining dot after NFD), so "ISPARTA" is "ısparta" and
+      // "İstanbul" is "istanbul": treat every i-letter as the same letter.
+      .replace(/[iIı]\u0307?/g, "[iIı]\\u0307?");
     const pattern = new RegExp(
       `(?<![\\p{L}\\p{M}\\p{N}_])${escaped}(?![\\p{L}\\p{M}\\p{N}_])`,
       "giu",
