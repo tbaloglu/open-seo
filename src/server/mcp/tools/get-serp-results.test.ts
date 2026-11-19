@@ -138,6 +138,37 @@ describe("get_serp_results", () => {
     ]);
   });
 
+  it("returns what each SERP feature shows, not only its type", async () => {
+    mockReads({
+      t1: completed(
+        organic(1, "a.com"),
+        {
+          type: "people_also_ask",
+          items: [{ title: "Turşu kaç günde olur?" }],
+        },
+        {
+          type: "ai_overview",
+          references: [{ domain: "www.cimri.com", title: "Kavanozlar" }],
+        },
+        { type: "related_searches", items: ["lahana turşusu"] },
+        { type: "compare_sites", items: [{ domain: "m.yelp.com" }] },
+      ),
+    });
+
+    const result = await getSerpResultsTool.handler(args, toolContext);
+
+    expect(itemsOf(result).map(({ type, details }) => [type, details])).toEqual(
+      [
+        ["organic", null],
+        ["people_also_ask", ["Turşu kaç günde olur?"]],
+        ["ai_overview", ["cimri.com: Kavanozlar"]],
+        ["related_searches", ["lahana turşusu"]],
+        ["compare_sites", ["m.yelp.com"]],
+      ],
+    );
+    expect(textContent(result)).toContain("cimri.com: Kavanozlar");
+  });
+
   it("reads to the requested depth and returns every merged site", async () => {
     const post = mockReads({
       t1: completed(organic(1, "a.com"), organic(2, "b.com")),

@@ -45,7 +45,71 @@ const SERP_ITEM_COLUMNS: McpTableColumn<SerpItem>[] = [
     value: (item) => item.description,
     format: truncatedCell(120),
   },
+  {
+    header: "details",
+    value: (item) => item.details?.join("; "),
+    format: truncatedCell(240),
+  },
 ];
+
+// A feature row's content lives in DataForSEO's nested elements, whose shapes
+// vary by type: plain strings for searches, objects for the rest. Anything
+// unexpected yields no details rather than failing the row.
+const MAX_FEATURE_DETAILS = 10;
+const featureElementSchema = z.union([
+  z.string(),
+  z.looseObject({
+    title: z.string().nullish(),
+    domain: z.string().nullish(),
+  }),
+]);
+const featureContentSchema = z.looseObject({
+  items: z.array(featureElementSchema).nullish(),
+  references: z.array(featureElementSchema).nullish(),
+});
+type FeatureElement = z.infer<typeof featureElementSchema>;
+
+function host(domain: string | null | undefined) {
+  return domain?.toLowerCase().replace(/^www\./, "");
+}
+
+const elementTitle = (el: FeatureElement) =>
+  typeof el === "string" ? el : el.title;
+const elementSite = (el: FeatureElement) =>
+  typeof el === "string" ? el : host(el.domain);
+const elementSource = (el: FeatureElement) =>
+  typeof el === "string"
+    ? el
+    : [host(el.domain), el.title].filter(Boolean).join(": ");
+
+function featureValues(type: string, item: unknown) {
+  const parsed = featureContentSchema.safeParse(item);
+  if (!parsed.success) return [];
+  const { items, references } = parsed.data;
+  switch (type) {
+    case "people_also_ask":
+    case "related_searches":
+    case "people_also_search":
+      return items?.map(elementTitle) ?? [];
+    case "compare_sites":
+      return items?.map(elementSite) ?? [];
+    case "ai_overview":
+      return references?.map(elementSource) ?? [];
+    default:
+      return [];
+  }
+}
+
+/** A SERP feature's content, bounded so a feature can't flood the response. */
+function featureDetails(item: { type: string }): string[] | null {
+  const values = featureValues(item.type, item).filter(
+    (value): value is string => Boolean(value),
+  );
+  const details = [...new Set(values)].slice(0, MAX_FEATURE_DETAILS);
+  return details.length > 0
+    ? details.map((value) => value.slice(0, 150))
+    : null;
+}
 
 const querySchema = z.object({
   keyword: z.string().min(1).describe("Search query to fetch the SERP for."),
@@ -100,7 +164,7 @@ export const getSerpResultsTool = {
   config: {
     title: "Get Google SERP results",
     description:
-      "Get live Google organic search results for 1-10 keywords. Use it to see who ranks for a query, verify competitors, compare SERPs across keywords, or gather source URLs before content planning. Google serves automated readers pages that vary, so each keyword is read 3 times and merged into one row per site; expect 10-30 seconds. Quote bestPosition as a site's position: `rank` only numbers the merged rows, and a site with seenIn 1 is weak evidence. `url` can be a google.com/goto redirect that a plain fetch won't follow; `domain` is the reliable field, and finalUrls returns the page URLs for a job that can wait a few minutes. Costs ~5 credits per keyword at the default depth 10, and each additional 10 of depth adds ~3.5. Repeating the same call within 12 hours returns the same reads at no charge, so if a response is lost or a keyword is still running, wait a minute and repeat it. Per-keyword errors don't fail the batch. For a site's position over time, use get_rank_tracker or get_search_console_performance.",
+      "Get live Google organic search results for 1-10 keywords. Use it to see who ranks for a query, verify competitors, compare SERPs across keywords, or gather source URLs before content planning. Google serves automated readers pages that vary, so each keyword is read 3 times and merged into one row per site; expect 10-30 seconds. Quote bestPosition as a site's position: `rank` only numbers the merged rows, and a site with seenIn 1 is weak evidence. SERP feature rows follow the organic rows; their `details` list what the feature shows: People Also Ask questions, AI Overview sources as `domain: title`, related searches, and compare-site domains (a local_pack row's title is the business). `url` can be a google.com/goto redirect that a plain fetch won't follow; `domain` is the reliable field, and finalUrls returns the page URLs for a job that can wait a few minutes. Costs ~5 credits per keyword at the default depth 10, and each additional 10 of depth adds ~3.5. Repeating the same call within 12 hours returns the same reads at no charge, so if a response is lost or a keyword is still running, wait a minute and repeat it. Per-keyword errors don't fail the batch. For a site's position over time, use get_rank_tracker or get_search_console_performance.",
     inputSchema,
     outputSchema: serpSchema,
     annotations: {
@@ -196,6 +260,7 @@ export const getSerpResultsTool = {
             url: item.url ?? null,
             domain: item.domain ?? null,
             description: item.description ?? null,
+            details: organic ? null : featureDetails(item),
           };
         }),
         ...lookup.scope,

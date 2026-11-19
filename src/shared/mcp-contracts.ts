@@ -91,6 +91,9 @@ export const serpItemSchema = z.looseObject({
   url: z.string().nullable(),
   domain: z.string().nullable(),
   description: z.string().nullable(),
+  // A SERP feature's content: People Also Ask questions, AI Overview sources
+  // ("domain: title"), related searches, or compare-site domains.
+  details: z.array(z.string()).nullish(),
 });
 
 export const serpSchema = z.looseObject({
