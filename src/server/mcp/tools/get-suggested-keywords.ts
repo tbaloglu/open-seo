@@ -13,6 +13,7 @@ type Suggestion = { keyword: string; reason: KeywordSuggestionReason };
 
 const REASON_TEXT: Record<KeywordSuggestionReason, string> = {
   [KeywordSuggestionReason.CloseToTopThree]: "Search Console: ranks 4–6",
+  [KeywordSuggestionReason.CloseToTopFive]: "Search Console: ranks 7–10",
   [KeywordSuggestionReason.CloseToPageOne]: "Search Console: ranks 11–20",
   [KeywordSuggestionReason.FromYourSite]: "saved topic",
 };
@@ -32,7 +33,7 @@ export const getSuggestedKeywordsTool = {
   config: {
     title: "Get suggested keywords",
     description:
-      "Suggest up to 10 short seed keywords to research next: Search Console searches where the site's best page ranks 4–6 (close to the top 3) or 11–20 (close to page 1), then the project's saved topics. Use it when the user asks what to research or where to start. Search Console suggestions need a connected property. Uses no credits. Pass the suggestions to research_keywords as seeds.",
+      "Suggest up to 12 short seed keywords to research next: Search Console searches where the site's best page ranks 4–6 (close to the top 3), 7–10 (close to the top 5) or 11–20 (close to page 1), then the project's saved topics. Use it when the user asks what to research or where to start. Search Console suggestions need a connected property. Uses no credits. Pass the suggestions to research_keywords as seeds.",
     inputSchema,
     outputSchema: z.looseObject({
       suggestions: z.array(

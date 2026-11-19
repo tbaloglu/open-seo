@@ -18,16 +18,18 @@ import { researchWebsite } from "@/server/features/projects/services/websiteRese
 import { AppError } from "@/server/lib/errors";
 import { KeywordSuggestionReason } from "@/shared/keyword-suggestions";
 
-const MAX_SUGGESTIONS = 10;
+// Three Search Console bands of 3 fill 9 slots; 12 leaves room for at least
+// 3 of the site's own topics.
+const MAX_SUGGESTIONS = 12;
 // A longer search returns results that drift off topic, so only short seed
 // phrases are suggested. The long tail is in their results.
 const MAX_SEED_WORDS = 3;
-// Where the site's best page ranks, rounded: just below the top 3, then page 2.
-// Lower on page 1 is too far from the top 3 to call close. Each band gets its
-// own slots, since higher-ranked searches have far more impressions and would
-// otherwise crowd out page 2.
+// Where the site's best page ranks, rounded: just below the top 3, lower on
+// page 1, then page 2. Each band gets its own slots, since higher-ranked
+// searches have far more impressions and would otherwise crowd out the rest.
 const SEARCH_CONSOLE_BANDS = [
   { reason: KeywordSuggestionReason.CloseToTopThree, first: 4, last: 6 },
+  { reason: KeywordSuggestionReason.CloseToTopFive, first: 7, last: 10 },
   { reason: KeywordSuggestionReason.CloseToPageOne, first: 11, last: 20 },
 ];
 const MAX_PER_SEARCH_CONSOLE_BAND = 3;
@@ -38,8 +40,8 @@ function isSeedPhrase(keyword: string) {
   return keyword.trim().split(/\s+/).length <= MAX_SEED_WORDS;
 }
 
-/** Short searches the site ranks for just below the top 3 or on page 2, or
- *  null without a working Search Console connection. */
+/** Short searches the site ranks for just below the top 3, lower on page 1 or
+ *  on page 2, or null without a working Search Console connection. */
 async function listSearchConsoleSuggestions(projectId: string) {
   try {
     const { rows } = await GscService.getPerformance({

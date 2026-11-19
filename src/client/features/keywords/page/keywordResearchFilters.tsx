@@ -53,7 +53,7 @@ export function FilterTextInput({
   placeholder,
 }: {
   form: FiltersForm;
-  name: "include" | "exclude";
+  name: "include" | "exclude" | "topics";
   label: string;
   placeholder: string;
 }) {

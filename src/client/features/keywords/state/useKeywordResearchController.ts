@@ -203,14 +203,15 @@ export function useKeywordResearchController(
     setSerpPage,
   ]);
 
-  const { filteredRows, activeFilterCount } = useKeywordFiltering({
-    groupKeywords,
-    rows,
-    searchedKeyword,
-    filters: filterValues,
-    sortField: input.sortField,
-    sortDir: input.sortDir,
-  });
+  const { filteredRows, activeFilterCount, topicHiddenCount } =
+    useKeywordFiltering({
+      groupKeywords,
+      rows,
+      searchedKeyword,
+      filters: filterValues,
+      sortField: input.sortField,
+      sortDir: input.sortDir,
+    });
 
   const { showApproximateMatchNotice, overviewKeyword } =
     useKeywordOverviewState({
@@ -267,6 +268,7 @@ export function useKeywordResearchController(
     preferredGroupKeywords,
     setPreferredGroupKeywords,
     activeFilterCount,
+    topicHiddenCount,
     activeSerpKeyword,
     confirmSave,
     controlsForm,

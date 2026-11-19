@@ -95,6 +95,7 @@ function TableCard({ controller }: Props) {
     rows,
     selectedKeywordRows,
     showFilters,
+    topicHiddenCount,
   } = controller;
   const { page, pageSize, pageRange, pageRows, setPage, setPageSize } =
     useKeywordResearchPagination(filteredRows);
@@ -172,6 +173,11 @@ function TableCard({ controller }: Props) {
               <span className="text-xs text-muted-foreground md:text-sm">
                 {keywordCountLabel}
               </span>
+              {topicHiddenCount > 0 ? (
+                <span className="text-xs text-muted-foreground md:text-sm">
+                  · Topic words hid {topicHiddenCount}
+                </span>
+              ) : null}
             </DataTableToolbar>
             {showFilters ? <TableFilters controller={controller} /> : null}
           </>
@@ -204,7 +210,7 @@ function TableFilters({ controller }: Props) {
       activeCount={activeFilterCount}
       onReset={controller.resetFilters}
     >
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         <FilterTextInput
           form={filtersForm}
           name="include"
@@ -216,6 +222,12 @@ function TableFilters({ controller }: Props) {
           name="exclude"
           label="Exclude Terms"
           placeholder="jobs, salary, course"
+        />
+        <FilterTextInput
+          form={filtersForm}
+          name="topics"
+          label="Topic Words (any)"
+          placeholder="pickle, brine, jar"
         />
       </div>
 

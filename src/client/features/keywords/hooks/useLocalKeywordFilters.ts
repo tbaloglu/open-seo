@@ -22,6 +22,7 @@ export const filterValuesSchema = z.object({
   // Defaulted so filter blobs persisted before the intent filter existed still
   // parse (missing key -> "") instead of discarding the user's saved filters.
   intents: z.string().default(""),
+  topics: z.string().default(""),
 });
 
 function loadFiltersFromStorage(projectId: string): KeywordFilterValues {
@@ -69,6 +70,7 @@ export function useLocalKeywordFilters(projectId: string) {
       "minKd",
       "maxKd",
       "intents",
+      "topics",
     ];
 
     for (const key of keys) {
