@@ -2,11 +2,12 @@ import { waitUntil } from "cloudflare:workers";
 import { SERP_ANALYSIS_DEPTH } from "@/server/lib/dataforseo";
 import { AppError } from "@/server/lib/errors";
 import { buildCacheKey, getCached, setCached } from "@/server/lib/r2-cache";
-import type { SerpResultItem } from "@/types/keywords";
+import type { SerpFeature, SerpResultItem } from "@/types/keywords";
 import { z } from "zod";
 import type { BillingCustomerContext } from "@/server/billing/subscription";
 import { normalizeKeyword } from "./helpers";
 import { assertLocalResearchLocation } from "./local-volume";
+import { featureDetails } from "./serpFeatures";
 import { readMergedSerps, type MergedSerpItem } from "./serpReads";
 
 const SERP_CACHE_TTL_SECONDS = 12 * 60 * 60;
@@ -16,6 +17,8 @@ type SerpAnalysisReason = "no_organic_results";
 type SerpAnalysisResult = {
   requestedKeyword: string;
   items: SerpResultItem[];
+  /** The SERP features on the page, in page order. */
+  features: SerpFeature[];
   /** SERP depth this snapshot was crawled at — how deep the results go. */
   depth: number;
   reason?: SerpAnalysisReason;
@@ -38,6 +41,9 @@ const serpResultItemSchema = z.object({
 const serpCacheSchema = z.object({
   requestedKeyword: z.string(),
   items: z.array(serpResultItemSchema),
+  features: z
+    .array(z.object({ type: z.string(), details: z.array(z.string()) }))
+    .default([]),
   // Entries written before depth was tracked don't say how deep they went, so
   // they're treated as the shallow floor: worst case a user re-buys a deeper
   // crawl once, rather than being shown a shallow list as if it went to 100.
@@ -64,6 +70,25 @@ function mapOrganicSerpItems(items: MergedSerpItem[]): SerpResultItem[] {
     }));
 }
 
+/**
+ * One entry per feature type. A local pack's rows are its businesses, so a
+ * row without nested content contributes its title.
+ */
+function mapSerpFeatures(items: MergedSerpItem[]): SerpFeature[] {
+  const byType = new Map<string, Set<string>>();
+  for (const item of items) {
+    if (item.type === "organic") continue;
+    const details = byType.get(item.type) ?? new Set<string>();
+    const values = featureDetails(item) ?? (item.title ? [item.title] : []);
+    for (const value of values) details.add(value);
+    byType.set(item.type, details);
+  }
+  return [...byType].map(([type, details]) => ({
+    type,
+    details: [...details].slice(0, 10),
+  }));
+}
+
 async function getSerpLiveAnalysis(
   input: {
     projectId: string;
@@ -72,11 +97,12 @@ async function getSerpLiveAnalysis(
     languageCode: string;
     depth: number;
     locationName?: string;
+    device: "desktop" | "mobile";
   },
   billingCustomer: BillingCustomerContext,
 ): Promise<SerpAnalysisResult> {
   const keyword = normalizeKeyword(input.keyword);
-  const { depth } = input;
+  const { depth, device } = input;
   if (input.locationName) {
     await assertLocalResearchLocation(input.locationCode, input.locationName);
   }
@@ -88,6 +114,8 @@ async function getSerpLiveAnalysis(
     locationCode: input.locationCode,
     languageCode: input.languageCode,
     locationName: input.locationName,
+    // A mobile SERP must never answer a desktop request, or the reverse.
+    device,
   });
 
   // Depth lives in the cached value, not the key: DataForSEO has no offset, so
@@ -108,6 +136,7 @@ async function getSerpLiveAnalysis(
         languageCode: input.languageCode,
         locationName: input.locationName,
         depth,
+        device,
       },
       receiptKey: await buildCacheKey("serp:analysis-reads", {
         organizationId: billingCustomer.organizationId,
@@ -117,6 +146,7 @@ async function getSerpLiveAnalysis(
         languageCode: input.languageCode,
         locationName: input.locationName,
         depth,
+        device,
       }),
     },
   ]);
@@ -133,6 +163,7 @@ async function getSerpLiveAnalysis(
   const result: SerpAnalysisResult = {
     requestedKeyword: keyword,
     items,
+    features: mapSerpFeatures(outcome.items),
     depth,
   };
   if (items.length === 0) {

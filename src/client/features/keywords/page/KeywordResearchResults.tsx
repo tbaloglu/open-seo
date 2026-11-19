@@ -264,6 +264,9 @@ function KeywordDetailPanel({ controller }: Props) {
 
         <SerpAnalysisCard
           items={controller.serpResults}
+          features={controller.serpFeatures}
+          device={controller.serpDevice}
+          onDeviceChange={controller.setSerpDevice}
           keyword={controller.activeSerpKeyword}
           loading={controller.serpLoading}
           loadingMore={controller.serpLoadingMore}

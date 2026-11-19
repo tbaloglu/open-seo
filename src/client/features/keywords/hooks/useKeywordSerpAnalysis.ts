@@ -5,6 +5,9 @@ import {
   getStandardErrorMessage,
 } from "@/client/lib/error-messages";
 import { getSerpAnalysis } from "@/serverFunctions/keywords";
+import { DEFAULT_SERP_DEVICE } from "@/types/schemas/keywords";
+
+export type SerpDevice = "desktop" | "mobile";
 
 const SERP_PAGE_SIZE = 10;
 /** Depth every SERP panel opens at — page 1, read and merged, ~5 credits. */
@@ -26,6 +29,8 @@ export function useKeywordSerpAnalysis(
   const [requestedDepth, setRequestedDepth] = useState<10 | 100>(
     SERP_INITIAL_DEPTH,
   );
+  const [serpDevice, setSerpDeviceState] =
+    useState<SerpDevice>(DEFAULT_SERP_DEVICE);
 
   // Everything but the depth identifies the snapshot; the depth decides how
   // deep it goes.
@@ -35,6 +40,7 @@ export function useKeywordSerpAnalysis(
     serpKeyword,
     locationCode,
     locationName,
+    serpDevice,
   ];
 
   const serpQuery = useQuery({
@@ -47,6 +53,7 @@ export function useKeywordSerpAnalysis(
           locationCode,
           locationName,
           depth: requestedDepth,
+          device: serpDevice,
         },
       }),
     // Keep the shallow snapshot on screen while the deeper refetch runs — but
@@ -71,6 +78,7 @@ export function useKeywordSerpAnalysis(
 
   const { refetch: refetchSerp } = serpQuery;
   const serpResults = serpQuery.data?.items ?? [];
+  const serpFeatures = serpQuery.data?.features ?? [];
   const activeSerpKeyword =
     serpKeyword ?? serpQuery.data?.requestedKeyword ?? null;
   const serpLoading = !!serpKeyword && serpQuery.isLoading;
@@ -103,6 +111,13 @@ export function useKeywordSerpAnalysis(
 
   const setSerpKeyword = useCallback((keyword: string | null) => {
     setSerpKeywordState(keyword);
+    setRequestedDepth(SERP_INITIAL_DEPTH);
+    setSerpPageState(0);
+  }, []);
+
+  // The other device is another SERP: it opens at page 1, top results only.
+  const setSerpDevice = useCallback((device: SerpDevice) => {
+    setSerpDeviceState(device);
     setRequestedDepth(SERP_INITIAL_DEPTH);
     setSerpPageState(0);
   }, []);
@@ -141,6 +156,9 @@ export function useKeywordSerpAnalysis(
     setSerpPage,
     SERP_PAGE_SIZE,
     serpResults,
+    serpFeatures,
+    serpDevice,
+    setSerpDevice,
     activeSerpKeyword,
     serpLoading,
     serpLoadingMore,

@@ -215,6 +215,12 @@ export type DeleteSavedKeywordTagInput = z.infer<
 export type RefreshSavedKeywordMetricsInput = z.infer<
   typeof refreshSavedKeywordMetricsSchema
 >;
+/**
+ * Device the SERP panel reads first. Mobile, because most searches are; the
+ * panel can switch to desktop at the same price.
+ */
+export const DEFAULT_SERP_DEVICE = "mobile";
+
 export const serpAnalysisSchema = z.object({
   projectId: z.string().min(1),
   keyword: z.string().min(1),
@@ -226,6 +232,7 @@ export const serpAnalysisSchema = z.object({
   // full 100 the SERP panel buys when a user pages past the loaded results.
   // Each 10 of depth is another crawled Google page (~3.5 credits).
   depth: z.union([z.literal(10), z.literal(100)]).default(10),
+  device: z.enum(["desktop", "mobile"]).default(DEFAULT_SERP_DEVICE),
 });
 
 /* ------------------------------------------------------------------ */

@@ -1,16 +1,32 @@
 import { useMemo } from "react";
 import { createColumnHelper } from "@tanstack/react-table";
-import { ExternalLink, Globe } from "lucide-react";
+import { ExternalLink, Globe, Monitor, Smartphone } from "lucide-react";
 import { ErrorState } from "@/client/components/ErrorState";
 import { GetCreditsButton } from "@/client/features/billing/InsufficientCreditsError";
 import { ExportMenu } from "@/client/components/ExportMenu";
+import { SegmentedToggle } from "@/client/components/SegmentedToggle";
 import { Button } from "@/client/components/ui/button";
 import { DataTable, useDataTable } from "@/client/components/table/DataTable";
 import { DataTableToolbar } from "@/client/components/table/DataTableToolbar";
 import { TablePagination } from "@/client/components/table/TablePagination";
 import { exportRows } from "@/client/lib/exportRows";
-import type { SerpResultItem } from "@/types/keywords";
+import type { SerpFeature, SerpResultItem } from "@/types/keywords";
 import { safeHttpUrl } from "@/shared/safe-url";
+import type { SerpDevice } from "@/client/features/keywords/hooks/useKeywordSerpAnalysis";
+import { SerpFeaturesList } from "./SerpFeaturesList";
+
+const DEVICE_ITEMS = [
+  {
+    value: "mobile" as const,
+    label: "Mobile",
+    icon: <Smartphone className="size-3.5" />,
+  },
+  {
+    value: "desktop" as const,
+    label: "Desktop",
+    icon: <Monitor className="size-3.5" />,
+  },
+];
 
 const columnHelper = createColumnHelper<SerpResultItem>();
 
@@ -58,6 +74,9 @@ const columns = [
 
 export function SerpAnalysisCard({
   items,
+  features,
+  device,
+  onDeviceChange,
   keyword,
   loading,
   loadingMore,
@@ -72,6 +91,10 @@ export function SerpAnalysisCard({
   onPageChange,
 }: {
   items: SerpResultItem[];
+  features: SerpFeature[];
+  /** The device the SERP is read for; switching reads the other one. */
+  device: SerpDevice;
+  onDeviceChange: (device: SerpDevice) => void;
   keyword?: string | null;
   loading: boolean;
   /** A deeper snapshot is being fetched; `items` is still the shallow one. */
@@ -125,25 +148,32 @@ export function SerpAnalysisCard({
         <>
           <DataTableToolbar
             actions={
-              hasItems ? (
-                <ExportMenu
-                  actions={["sheets", "csv"]}
-                  onExport={(format) =>
-                    void exportRows({
-                      format,
-                      feature: "serp_analysis",
-                      headers: ["Rank", "Title", "URL", "Domain"],
-                      rows: items.map((item) => [
-                        item.rank,
-                        item.title ?? "",
-                        item.url,
-                        item.domain,
-                      ]),
-                      filename: "serp-analysis",
-                    })
-                  }
+              <>
+                <SegmentedToggle
+                  items={DEVICE_ITEMS}
+                  value={device}
+                  onChange={onDeviceChange}
                 />
-              ) : null
+                {hasItems ? (
+                  <ExportMenu
+                    actions={["sheets", "csv"]}
+                    onExport={(format) =>
+                      void exportRows({
+                        format,
+                        feature: "serp_analysis",
+                        headers: ["Rank", "Title", "URL", "Domain"],
+                        rows: items.map((item) => [
+                          item.rank,
+                          item.title ?? "",
+                          item.url,
+                          item.domain,
+                        ]),
+                        filename: "serp-analysis",
+                      })
+                    }
+                  />
+                ) : null}
+              </>
             }
           >
             <div className="flex min-w-0 flex-col">
@@ -189,18 +219,21 @@ export function SerpAnalysisCard({
             }
       }
       footer={
-        hasItems && (totalPages > 1 || canLoadMore) ? (
-          <TablePagination
-            page={page + 1}
-            pageSize={pageSize}
-            totalCount={items.length}
-            isLoading={loadingMore}
-            // Past the loaded results, "Next" buys a deeper crawl. The button
-            // says so rather than spending silently.
-            loadMoreLabel={canLoadMore ? "Load top 100" : undefined}
-            onPageChange={(nextPage) => onPageChange(nextPage - 1)}
-          />
-        ) : null
+        <>
+          {hasItems && (totalPages > 1 || canLoadMore) ? (
+            <TablePagination
+              page={page + 1}
+              pageSize={pageSize}
+              totalCount={items.length}
+              isLoading={loadingMore}
+              // Past the loaded results, "Next" buys a deeper crawl. The button
+              // says so rather than spending silently.
+              loadMoreLabel={canLoadMore ? "Load top 100" : undefined}
+              onPageChange={(nextPage) => onPageChange(nextPage - 1)}
+            />
+          ) : null}
+          {loading ? null : <SerpFeaturesList features={features} />}
+        </>
       }
     />
   );
