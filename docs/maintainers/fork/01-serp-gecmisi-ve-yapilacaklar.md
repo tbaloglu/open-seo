@@ -1,6 +1,6 @@
 # Fork tasarımı 01: Sonuç sayfası geçmişi, yapılacaklar listesi, keyword gap
 
-Durum: taslak, sahibinin onayını bekliyor (20.11.2026). Bu fork'a (tbaloglu/open-seo) özgüdür; upstream'e önerilmeyecek.
+Durum: onaylandı (20.11.2026); kararlar en altta. Bu fork'a (tbaloglu/open-seo) özgüdür; upstream'e önerilmeyecek.
 
 ## Amaç
 
@@ -138,9 +138,23 @@ OpenSEO'nun kendi tahmin aracı, tekrar okuma ihtimali yüzünden en kötü duru
 4. D (keyword gap aracı).
 5. E: aylık döngünün kurulması (zamanlanmış görev).
 
-## Sahibine sorular
+## Kararlar (20.11.2026)
 
-1. Aylık takip için kelime sayısı site başına 100 mü olsun, daha az mı? Turşucular ile başlayıp sonra diğer sitelere mi geçelim?
-2. Takip aylık mı, haftalık mı? Aylık daha ucuz; haftalık değişimi daha erken gösterir.
-3. Yapılacaklar listesindeki durumlar yeterli mi: öneri, seçildi, yapılıyor, yapıldı, vazgeçildi?
-4. Aşama sırası uygun mu?
+1. **Kelime seti site başına farklıdır ve sabit değildir.** Her takip iki parçadan oluşur:
+   - **Çekirdek** (yaklaşık %70): her ay aynı kalan kelimeler, eğilim karşılaştırılabilsin diye. GSC'de gösterimi en yüksek aramalar ve yapılacaklar listesindeki işlerin hedef kelimeleri.
+   - **Keşif** (yaklaşık %30): her ay yenilenir. GSC'de yeni beliren aramalar, keyword gap'ten gelen kelimeler ve "Diğer sorular"dan çıkan konular.
+
+   Toplam sayıyı sitenin verisi belirler: son 3 ayda en az 20 gösterim alan ve ortalama sırası 30'dan iyi olan GSC aramalarının sayısı, 30 ile 200 arasında sınırlanır. Niş bir sitede (Sinastri) sayı kendiliğinden azalır; hızlı büyüyen sitede (Voleybol) artar. Sahibi site başına bu sayıyı elle de değiştirebilir.
+2. **Sıklık:** Sitedeki değişiklikler aylık yapılır. Ücretli sıralama takibi aylık çalışır. Ücretsiz kaynaklar (GSC, GA4) ise günlük izlenir; bkz. F.
+3. **Yapılacaklar durumları:** öneri, seçildi, yapılıyor, yapıldı, vazgeçildi.
+4. **Aşama sırası:** "Aşamalar" bölümündeki gibi.
+
+### F. Günlük ücretsiz nabız (ek)
+
+GSC ve GA4 verisini Google zaten 16 ay saklıyor, bu yüzden kopyası tutulmaz. Günlük iş yalnızca **uyarı** üretir. Uyarı durumları:
+- bir sayfanın tıklamaları ya da gösterimleri son 7 günün ortalamasına göre belirgin düştü;
+- daha önce gösterim alan bir sayfa gösterim almaz oldu (Giresun il sayfasında olduğu gibi: dizinden çıkma, noindex);
+- yeni bir arama hızla gösterim almaya başladı;
+- GA4'te organik oturumlar sert düştü.
+
+Uyarılar yapılacaklar listesine "öneri" olarak düşer ve aylık rapora girer. Bu iş sunucuda çalışır, Claude'u her gün çalıştırmaz; yani token maliyeti yok. Aşama sırasında E'den sonra gelir.
