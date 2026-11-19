@@ -330,7 +330,8 @@ export async function postRankCheckTasks(input: {
 type RankCheckTaskOutcome =
   | { status: "pending" }
   | { status: "failed"; message: string }
-  | { status: "completed"; result: RankCheckResult };
+  // `items` is the page the result came from, for the fork's SERP history.
+  | { status: "completed"; result: RankCheckResult; items: SerpLiveItem[] };
 
 /**
  * Collect one queued task's result. Deliberately not metered and not wrapped
@@ -349,6 +350,7 @@ export async function fetchRankCheckTaskResult(input: {
   return {
     status: "completed",
     result: buildRankCheckResult(input, outcome.items),
+    items: outcome.items,
   };
 }
 

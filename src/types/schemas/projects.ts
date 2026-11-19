@@ -62,6 +62,8 @@ export const updateProjectSchema = z
     domain: projectDomainField,
     locationCode: projectLocationCodeField,
     languageCode: projectLanguageCodeField,
+    // Omitted leaves the project's default device as it is.
+    defaultDevice: z.enum(["mobile", "desktop"]).optional(),
   })
   .refine(hasLocationForLanguage, marketPairMessage);
 

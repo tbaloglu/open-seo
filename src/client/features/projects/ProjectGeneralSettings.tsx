@@ -54,7 +54,13 @@ const generalSchema = z.object({
   name: z.string().trim().min(1, "Enter a project name."),
   domain: z.string(),
   market: z.object({ locationCode: z.number(), languageCode: z.string() }),
+  defaultDevice: z.enum(["mobile", "desktop"]),
 });
+
+const DEVICE_ITEMS = [
+  { value: "mobile", label: "Mobile" },
+  { value: "desktop", label: "Desktop" },
+] as const;
 
 function GeneralSection({ project }: { project: ProjectSummary }) {
   const queryClient = useQueryClient();
@@ -73,6 +79,7 @@ function GeneralSection({ project }: { project: ProjectSummary }) {
               : undefined,
           domain: values.domain.trim() || undefined,
           ...values.market,
+          defaultDevice: values.defaultDevice,
         },
       }),
     onSuccess: async (saved) => {
@@ -102,6 +109,7 @@ function GeneralSection({ project }: { project: ProjectSummary }) {
         locationCode: project.locationCode,
         languageCode: project.languageCode,
       },
+      defaultDevice: project.defaultDevice,
     },
     validationLogic: revalidateLogic(),
     validators: { onDynamic: generalSchema },
@@ -172,6 +180,16 @@ function GeneralSection({ project }: { project: ProjectSummary }) {
               unless a call asks for a different one.
             </span>
           </div>
+
+          <form.AppField name="defaultDevice">
+            {(field) => (
+              <field.SelectField
+                label="Default device"
+                items={DEVICE_ITEMS}
+                description="SERP checks and new rank trackers use this device unless you pick another."
+              />
+            )}
+          </form.AppField>
 
           <div className="flex justify-end">
             <form.Subscribe selector={(state) => state.isDefaultValue}>

@@ -21,6 +21,12 @@ vi.mock("@/server/lib/dataforseo", () => ({
   fetchRankCheckTaskResult: mocks.fetchRankCheckTaskResult,
   MAX_TASKS_PER_POST: 100,
 }));
+// SERP history has its own test (rankCheckSerpHistory.test.ts).
+vi.mock("@/server/features/serp-history/services/saveSerpHistory", () => ({
+  readSerpPage: () => null,
+  saveSerpHistory: async () => {},
+  dropSerpHistory: async () => {},
+}));
 vi.mock("@/server/workflows/pgStep", () => ({
   pgStep: (
     _step: unknown,

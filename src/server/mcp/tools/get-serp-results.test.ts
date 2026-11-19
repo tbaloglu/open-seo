@@ -85,6 +85,7 @@ describe("get_serp_results", () => {
       id: "project_1",
       locationCode: 2840,
       languageCode: "en",
+      defaultDevice: "mobile",
     });
   });
 
@@ -237,18 +238,22 @@ describe("get_serp_results", () => {
     expect(mocks.fetchSerpTaskResult).toHaveBeenCalledTimes(polls + 1);
   });
 
-  it("posts a mobile SERP separately from a desktop one", async () => {
+  it("reads the project's default device unless a query names one, each SERP separately", async () => {
     const post = mockReads({ t1: completed(organic(1, "a.com")) });
 
     await getSerpResultsTool.handler(args, toolContext);
     await getSerpResultsTool.handler(
-      { ...args, queries: [{ keyword: "seo tools", device: "mobile" }] },
+      { ...args, queries: [{ keyword: "seo tools", device: "desktop" }] },
       toolContext,
     );
 
     expect(post).toHaveBeenCalledTimes(2);
-    expect(post).toHaveBeenLastCalledWith(
+    expect(post).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({ device: "mobile" }),
+    );
+    expect(post).toHaveBeenLastCalledWith(
+      expect.objectContaining({ device: "desktop" }),
     );
   });
 

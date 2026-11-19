@@ -19,6 +19,7 @@ function mapProject(project: {
   domain: string | null;
   locationCode: number;
   languageCode: string;
+  defaultDevice: "mobile" | "desktop";
   createdAt: string;
 }) {
   return {
@@ -30,6 +31,8 @@ function mapProject(project: {
     // fall back to these when a call omits locationCode/languageCode).
     locationCode: project.locationCode,
     languageCode: project.languageCode,
+    // Device SERP reads fall back to when a call names none.
+    defaultDevice: project.defaultDevice,
     createdAt: project.createdAt,
   };
 }
@@ -133,6 +136,7 @@ export async function updateProject(
         brandName: input.brandName,
         domain: normalizeProjectDomain(input.domain),
         market: resolveMarketInput(input),
+        defaultDevice: input.defaultDevice,
       },
     );
     return mapProject(row);

@@ -40,7 +40,9 @@ const inputSchema = {
   devices: z
     .enum(["desktop", "mobile", "both"])
     .optional()
-    .describe("Devices to track. Defaults to mobile."),
+    .describe(
+      "Devices to track. Defaults to the project's default device (mobile unless changed in project settings).",
+    ),
   serpDepth: z
     .number()
     .int()
@@ -69,7 +71,7 @@ export const createRankTrackerTool = {
   config: {
     title: "Create rank tracker",
     description:
-      "Create a rank tracker for a project. The domain and market default to the project's; devices default to mobile, search depth to 40, and schedule to manual. For local (city-level) tracking, call search_serp_locations first and pass its locationName verbatim. Creating an empty tracker uses no credits and starts no check, but daily, weekly, and monthly trackers spend credits once keywords are added. Call get_rank_tracker first to avoid duplicates, and estimate_rank_tracker_cost before adding keywords to a scheduled tracker or starting a check.",
+      "Create a rank tracker for a project. The domain and market default to the project's; devices default to the project's default device, search depth to 40, and schedule to manual. For local (city-level) tracking, call search_serp_locations first and pass its locationName verbatim. Creating an empty tracker uses no credits and starts no check, but daily, weekly, and monthly trackers spend credits once keywords are added. Call get_rank_tracker first to avoid duplicates, and estimate_rank_tracker_cost before adding keywords to a scheduled tracker or starting a check.",
     inputSchema,
     outputSchema: z
       .object({
@@ -100,7 +102,7 @@ export const createRankTrackerTool = {
       locationCode: args.locationCode,
       languageCode: args.languageCode,
       locationName: args.locationName,
-      devices: args.devices ?? "mobile",
+      devices: args.devices ?? context.project.defaultDevice,
       serpDepth: args.serpDepth ?? 40,
       scheduleInterval: args.scheduleInterval ?? "manual",
       scheduleTime: args.scheduleTime,

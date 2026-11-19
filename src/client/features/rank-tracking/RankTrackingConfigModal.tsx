@@ -100,9 +100,8 @@ export function RankTrackingConfigModal({
     ...projectsQueryOptions(),
     enabled: !existingConfig,
   });
-  const initialMarket =
-    existingConfig ??
-    projectsQuery.data?.find((project) => project.id === projectId);
+  const project = projectsQuery.data?.find((entry) => entry.id === projectId);
+  const initialMarket = existingConfig ?? project;
 
   if (!initialMarket) {
     return (
@@ -138,6 +137,7 @@ export function RankTrackingConfigModal({
       projectId={projectId}
       existingConfig={existingConfig}
       initialMarket={initialMarket}
+      defaultDevice={project?.defaultDevice ?? "mobile"}
       onClose={onClose}
       onSaved={onSaved}
       onConfigCreated={onConfigCreated}
@@ -149,10 +149,15 @@ function RankTrackingConfigModalContent({
   projectId,
   existingConfig,
   initialMarket,
+  defaultDevice,
   onClose,
   onSaved,
   onConfigCreated,
-}: Props & { initialMarket: ProjectMarket }) {
+}: Props & {
+  initialMarket: ProjectMarket;
+  /** A new tracker starts on the project's default device. */
+  defaultDevice: "mobile" | "desktop";
+}) {
   const countryId = useId();
   const isEdit = !!existingConfig;
   const [createdConfigId, setCreatedConfigId] = useState<string>();
@@ -178,7 +183,7 @@ function RankTrackingConfigModalContent({
     languageCode: existingConfig?.languageCode ?? initialMarket.languageCode,
     targetingMode: existingConfig?.locationName ? "local" : "national",
     locationName: existingConfig?.locationName ?? undefined,
-    devices: existingConfig?.devices ?? "mobile",
+    devices: existingConfig?.devices ?? defaultDevice,
     schedule: existingConfig?.scheduleInterval ?? "weekly",
     // Shown and edited in the browser's timezone; the server converts it to UTC.
     scheduleTime: localScheduleTimeFrom(

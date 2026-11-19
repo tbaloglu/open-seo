@@ -6,6 +6,7 @@ import {
 } from "@/client/lib/error-messages";
 import { getSerpAnalysis } from "@/serverFunctions/keywords";
 import { DEFAULT_SERP_DEVICE } from "@/types/schemas/keywords";
+import { projectsQueryOptions } from "@/client/features/projects/projectQueries";
 
 export type SerpDevice = "desktop" | "mobile";
 
@@ -29,8 +30,21 @@ export function useKeywordSerpAnalysis(
   const [requestedDepth, setRequestedDepth] = useState<10 | 100>(
     SERP_INITIAL_DEPTH,
   );
-  const [serpDevice, setSerpDeviceState] =
-    useState<SerpDevice>(DEFAULT_SERP_DEVICE);
+  // Until the user switches, the panel reads the project's default device.
+  // The choice belongs to the project it was made in, so switching projects
+  // goes back to that project's default.
+  const [chosen, setChosen] = useState<{
+    projectId: string;
+    device: SerpDevice;
+  } | null>(null);
+  const chosenDevice = chosen?.projectId === projectId ? chosen.device : null;
+  const projectsQuery = useQuery(projectsQueryOptions());
+  const project = projectsQuery.data?.find((entry) => entry.id === projectId);
+  const serpDevice =
+    chosenDevice ?? project?.defaultDevice ?? DEFAULT_SERP_DEVICE;
+  // Every read is billed, so none starts on a guessed device: wait for the
+  // project's default unless the user picked one.
+  const deviceKnown = chosenDevice !== null || !projectsQuery.isPending;
 
   // Everything but the depth identifies the snapshot; the depth decides how
   // deep it goes.
@@ -73,7 +87,7 @@ export function useKeywordSerpAnalysis(
     retry: false,
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
-    enabled: !!serpKeyword,
+    enabled: !!serpKeyword && deviceKnown,
   });
 
   const { refetch: refetchSerp } = serpQuery;
@@ -81,7 +95,7 @@ export function useKeywordSerpAnalysis(
   const serpFeatures = serpQuery.data?.features ?? [];
   const activeSerpKeyword =
     serpKeyword ?? serpQuery.data?.requestedKeyword ?? null;
-  const serpLoading = !!serpKeyword && serpQuery.isLoading;
+  const serpLoading = !!serpKeyword && (!deviceKnown || serpQuery.isLoading);
   const serpError = serpQuery.isError
     ? getStandardErrorMessage(serpQuery.error, "Failed to load SERP data.")
     : null;
@@ -116,11 +130,14 @@ export function useKeywordSerpAnalysis(
   }, []);
 
   // The other device is another SERP: it opens at page 1, top results only.
-  const setSerpDevice = useCallback((device: SerpDevice) => {
-    setSerpDeviceState(device);
-    setRequestedDepth(SERP_INITIAL_DEPTH);
-    setSerpPageState(0);
-  }, []);
+  const setSerpDevice = useCallback(
+    (device: SerpDevice) => {
+      setChosen({ projectId, device });
+      setRequestedDepth(SERP_INITIAL_DEPTH);
+      setSerpPageState(0);
+    },
+    [projectId],
+  );
 
   const loadedPages = Math.max(
     1,

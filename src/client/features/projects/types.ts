@@ -12,5 +12,7 @@ export type ProjectSummary = {
   // Default market for the project's data calls.
   locationCode: number;
   languageCode: string;
+  // Device SERP reads use when a call names none.
+  defaultDevice: "mobile" | "desktop";
   createdAt: string;
 };
