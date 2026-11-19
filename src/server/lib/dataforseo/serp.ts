@@ -49,6 +49,7 @@ export const serpSnapshotItemSchema = z
     url: z.string().nullable().optional(),
     description: z.string().nullable().optional(),
     breadcrumb: z.string().nullable().optional(),
+    website_name: z.string().nullable().optional(),
     etv: z.number().nullable().optional(),
     estimated_paid_traffic_cost: z.number().nullable().optional(),
     backlinks_info: z
@@ -71,20 +72,79 @@ export const serpSnapshotItemSchema = z
       .optional(),
   })
   .passthrough()
-  .transform(unwrapGoogleRedirect);
+  .transform((item) => ({
+    ...unwrapGoogleRedirect(item),
+    title: cleanSerpText(item.title),
+    description: cleanSerpText(item.description),
+  }));
 
 /**
  * Google wraps many organic results in a google.com/goto redirect, and
  * DataForSEO reports them with domain "google.com" and an encoded URL. The
- * real site is only in the breadcrumb ("https://www.runnersworld.com › gear").
- * When the breadcrumb isn't a URL (Reddit's "230+ comments") the domain is
- * unknown, which beats crediting google.com with the result.
+ * real site is usually in the breadcrumb ("https://www.runnersworld.com ›
+ * gear"). Social sites show "230+ comments" or "9 likes" there instead, but
+ * name the site in website_name ("Instagram", "Reddit · user"). When neither
+ * names the site the domain is unknown, which beats crediting google.com with
+ * the result.
  */
 function unwrapGoogleRedirect<
-  T extends { url?: string | null; breadcrumb?: string | null },
+  T extends {
+    url?: string | null;
+    breadcrumb?: string | null;
+    website_name?: string | null;
+  },
 >(item: T): T & { domain?: string | null } {
   if (!item.url || !isGoogleRedirect(item.url)) return item;
-  return { ...item, domain: breadcrumbHost(item.breadcrumb) };
+  return {
+    ...item,
+    domain:
+      breadcrumbHost(item.breadcrumb) ?? websiteNameHost(item.website_name),
+  };
+}
+
+// Sites Google names in website_name without a URL breadcrumb. Only names that
+// stand for exactly one site; a brand with country sites (Amazon) stays out.
+const SITE_NAME_DOMAINS: Record<string, string> = {
+  facebook: "facebook.com",
+  instagram: "instagram.com",
+  youtube: "youtube.com",
+  reddit: "reddit.com",
+  pinterest: "pinterest.com",
+  tiktok: "tiktok.com",
+  linkedin: "linkedin.com",
+  quora: "quora.com",
+};
+
+/** "Instagram · user" -> instagram.com; "dijitalrehber.com" as written. */
+function websiteNameHost(name: string | null | undefined): string | null {
+  const site = name?.split("·")[0]?.trim().toLowerCase();
+  if (!site) return null;
+  if (/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(site)) {
+    return site.replace(/^www\./, "");
+  }
+  return SITE_NAME_DOMAINS[site] ?? null;
+}
+
+// Google's highlight tags, including one cut off by the snippet's "..."
+// ("<b>Turşu</b ..."). Text like "<3" or "=>" is left alone.
+const HIGHLIGHT_TAG = /<\/?(?:b|strong|em|i)(?:>|(?![a-z]))/gi;
+const HTML_ENTITIES: Record<string, string> = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+  "&nbsp;": " ",
+};
+
+/** Mobile SERPs can carry Google's markup in titles and snippets. */
+function cleanSerpText(text: string | null | undefined) {
+  return text
+    ?.replace(HIGHLIGHT_TAG, "")
+    .replace(
+      /&(?:amp|lt|gt|quot|#39|nbsp);/g,
+      (entity) => HTML_ENTITIES[entity],
+    );
 }
 
 function breadcrumbHost(breadcrumb: string | null | undefined): string | null {
