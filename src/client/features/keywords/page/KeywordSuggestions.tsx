@@ -23,6 +23,7 @@ type Suggestion = KeywordSuggestionsData["suggestions"][number];
 // Most suggestions are the site's own topics, so only Search Console's are named.
 const REASON_NOTES: Record<KeywordSuggestionReason, string | null> = {
   [KeywordSuggestionReason.CloseToTopThree]: "Close to top 3",
+  [KeywordSuggestionReason.CloseToTopFive]: "Close to top 5",
   [KeywordSuggestionReason.CloseToPageOne]: "Close to page 1",
   [KeywordSuggestionReason.FromYourSite]: null,
 };

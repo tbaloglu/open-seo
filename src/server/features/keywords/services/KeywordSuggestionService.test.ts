@@ -83,7 +83,7 @@ describe("KeywordSuggestionService.getSuggestions", () => {
     getPerformance.mockRejectedValue(new GscNotConnectedError("project"));
   });
 
-  it("suggests short searches near the top 3 and page 1, then the site's short topics", async () => {
+  it("suggests short searches near the top 3, top 5 and page 1, then the site's short topics", async () => {
     getPerformance.mockResolvedValue({
       rows: [
         queryPage("jeep wrangler lease", "/wrangler", 12),
@@ -92,8 +92,8 @@ describe("KeywordSuggestionService.getSuggestions", () => {
         // Already in the top 3 through its best page.
         queryPage("jeep dealer", "/", 2),
         queryPage("jeep dealer", "/about", 6),
-        // Too far down page 1 to be close to the top 3.
-        queryPage("jeep parts", "/parts", 8),
+        // Rounds to 10, the end of page 1.
+        queryPage("jeep parts", "/parts", 10.4),
         queryPage("how much to lease a jeep wrangler", "/wrangler", 14),
       ],
     });
@@ -108,6 +108,10 @@ describe("KeywordSuggestionService.getSuggestions", () => {
         {
           keyword: "jeep lease",
           reason: KeywordSuggestionReason.CloseToTopThree,
+        },
+        {
+          keyword: "jeep parts",
+          reason: KeywordSuggestionReason.CloseToTopFive,
         },
         {
           keyword: "jeep wrangler lease",
