@@ -148,7 +148,28 @@ describe("get_serp_results", () => {
         },
         {
           type: "ai_overview",
-          references: [{ domain: "www.cimri.com", title: "Kavanozlar" }],
+          references: [
+            { domain: "www.cimri.com", title: "Kavanozlar" },
+            // Goto-wrapped sources say google.com; the name Google shows
+            // tells the site instead, and google.com is never credited.
+            {
+              domain: "google.com",
+              url: "https://google.com/goto?url=x",
+              source: "dogaltursu.com",
+              title: "Turşu Suyu Sümüksü Oldu",
+            },
+            {
+              domain: "google.com",
+              url: "https://google.com/goto?url=y",
+              source: "YemekNet",
+              title: "Turşu Suyu Neden Süner?",
+            },
+            {
+              domain: "google.com",
+              url: "https://google.com/goto?url=z",
+              title: "Turşu tarifi",
+            },
+          ],
         },
         { type: "related_searches", items: ["lahana turşusu"] },
         { type: "compare_sites", items: [{ domain: "m.yelp.com" }] },
@@ -161,7 +182,15 @@ describe("get_serp_results", () => {
       [
         ["organic", null],
         ["people_also_ask", ["Turşu kaç günde olur?"]],
-        ["ai_overview", ["cimri.com: Kavanozlar"]],
+        [
+          "ai_overview",
+          [
+            "cimri.com: Kavanozlar",
+            "dogaltursu.com: Turşu Suyu Sümüksü Oldu",
+            "YemekNet: Turşu Suyu Neden Süner?",
+            "Turşu tarifi",
+          ],
+        ],
         ["related_searches", ["lahana turşusu"]],
         ["compare_sites", ["m.yelp.com"]],
       ],

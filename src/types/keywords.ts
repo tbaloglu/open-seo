@@ -63,3 +63,9 @@ export type SerpResultItem = {
   isNew: boolean;
   rankChange: number | null;
 };
+
+/** A SERP feature on the page and what it shows, e.g. the PAA questions. */
+export type SerpFeature = {
+  type: string;
+  details: string[];
+};

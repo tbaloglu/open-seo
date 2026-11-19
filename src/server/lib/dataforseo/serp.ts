@@ -87,7 +87,7 @@ export const serpSnapshotItemSchema = z
  * names the site the domain is unknown, which beats crediting google.com with
  * the result.
  */
-function unwrapGoogleRedirect<
+export function unwrapGoogleRedirect<
   T extends {
     url?: string | null;
     breadcrumb?: string | null;

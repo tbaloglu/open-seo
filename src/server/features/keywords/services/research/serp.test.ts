@@ -48,6 +48,7 @@ const input = {
   keyword: "seo tools",
   locationCode: 2840,
   languageCode: "en",
+  device: "mobile" as const,
 };
 
 function cachedSnapshot(depth: number) {
@@ -177,6 +178,25 @@ describe("getSerpAnalysis cache depth", () => {
     expect(mocks.buildCacheKey).toHaveBeenCalledWith(
       "serp:analysis",
       expect.objectContaining({ locationName }),
+    );
+  });
+
+  it("reads and caches each device's SERP apart", async () => {
+    mocks.getCached.mockResolvedValue(null);
+    mockMergedSerp();
+
+    await getSerpAnalysis(
+      { ...input, depth: 10, device: "desktop" },
+      billingCustomer,
+    );
+
+    expect(mocks.readMergedSerps.mock.lastCall?.[1][0].query).toMatchObject({
+      device: "desktop",
+    });
+    // A mobile snapshot must never answer a desktop request.
+    expect(mocks.buildCacheKey).toHaveBeenCalledWith(
+      "serp:analysis",
+      expect.objectContaining({ device: "desktop" }),
     );
   });
 
