@@ -68,7 +68,7 @@ const querySchema = z.object({
     .enum(["desktop", "mobile"])
     .optional()
     .describe(
-      "Device to fetch the SERP for, default desktop. Use mobile to compare against a mobile rank tracker. Same price.",
+      "Device to fetch the SERP for. Defaults to the project's default device (mobile unless changed in project settings). Pass it to compare against a rank tracker on the other device. Same price.",
     ),
 });
 
@@ -121,7 +121,7 @@ export const getSerpResultsTool = {
       args.queries.map(async (q) => {
         try {
           const market = resolveMarket(q, context.project);
-          const device = q.device ?? "desktop";
+          const device = q.device ?? context.project.defaultDevice;
           if (q.locationName) {
             await assertLocalResearchLocation(
               market.locationCode,

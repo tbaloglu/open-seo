@@ -12,6 +12,11 @@ import type {
 } from "@/server/lib/dataforseo";
 import type { RankTrackingConfig } from "@/types/schemas/rank-tracking";
 import { pgStep } from "@/server/workflows/pgStep";
+import {
+  readSerpPage,
+  saveSerpHistory,
+  type SerpRead,
+} from "@/server/features/serp-history/services/saveSerpHistory";
 
 const SINGLE_ATTEMPT_STEP_CONFIG = {
   retries: { limit: 0, delay: "1 second" as const },
@@ -142,6 +147,7 @@ async function fetchQueuedRound(
 }> {
   const completed: RankCheckResultWithDevice[] = [];
   const stillPending: PostedRankCheckTask[] = [];
+  const serpReads: SerpRead[] = [];
 
   for (let i = 0; i < tasks.length; i += TASK_GET_CONCURRENCY) {
     const chunk = tasks.slice(i, i + TASK_GET_CONCURRENCY);
@@ -175,9 +181,18 @@ async function fetchQueuedRound(
         );
       } else {
         completed.push({ ...result.value.result, device: task.device });
+        serpReads.push({
+          keywordId: task.keywordId,
+          device: task.device,
+          position: result.value.result.position,
+          ...readSerpPage(result.value.items),
+        });
       }
     });
   }
+  // Fork: the pages stay out of the step's output (capped at 1 MiB), so their
+  // history is saved here, inside the collect step.
+  await saveSerpHistory(ctx.runId, serpReads);
   return { completed, stillPending };
 }
 

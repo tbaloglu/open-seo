@@ -6,6 +6,7 @@ import {
 } from "@/client/lib/error-messages";
 import { getSerpAnalysis } from "@/serverFunctions/keywords";
 import { DEFAULT_SERP_DEVICE } from "@/types/schemas/keywords";
+import { projectsQueryOptions } from "@/client/features/projects/projectQueries";
 
 export type SerpDevice = "desktop" | "mobile";
 
@@ -29,8 +30,13 @@ export function useKeywordSerpAnalysis(
   const [requestedDepth, setRequestedDepth] = useState<10 | 100>(
     SERP_INITIAL_DEPTH,
   );
-  const [serpDevice, setSerpDeviceState] =
-    useState<SerpDevice>(DEFAULT_SERP_DEVICE);
+  // Until the user switches, the panel reads the project's default device.
+  const [chosenDevice, setSerpDeviceState] = useState<SerpDevice | null>(null);
+  const project = useQuery(projectsQueryOptions()).data?.find(
+    (entry) => entry.id === projectId,
+  );
+  const serpDevice =
+    chosenDevice ?? project?.defaultDevice ?? DEFAULT_SERP_DEVICE;
 
   // Everything but the depth identifies the snapshot; the depth decides how
   // deep it goes.

@@ -52,34 +52,56 @@ const elementSource = (el: FeatureElement) => {
   return [site, el.title].filter(Boolean).join(": ");
 };
 
-function featureValues(type: string, item: unknown) {
+/** Each nested element as text, with its site when it names one. */
+function featureEntries(type: string, item: unknown) {
   const parsed = featureContentSchema.safeParse(item);
   if (!parsed.success) return [];
   const { items, references } = parsed.data;
+  const read = (
+    elements: FeatureElement[] | null | undefined,
+    text: (el: FeatureElement) => string | null | undefined,
+  ) =>
+    (elements ?? []).map((el) => ({
+      value: text(el),
+      domain: typeof el === "string" ? null : (elementHost(el) ?? null),
+    }));
   switch (type) {
     case "people_also_ask":
     case "related_searches":
     case "people_also_search":
-      return items?.map(elementTitle) ?? [];
+      return read(items, elementTitle);
     case "compare_sites":
-      return items?.map(elementSite) ?? [];
+      return read(items, elementSite);
     case "video":
     case "short_videos":
-      return items?.map(elementSource) ?? [];
+      return read(items, elementSource);
     case "ai_overview":
-      return references?.map(elementSource) ?? [];
+      return read(references, elementSource);
     default:
       return [];
   }
 }
 
+/**
+ * A SERP feature's values, each with the site it belongs to when known,
+ * bounded so a feature can't flood a response or a stored SERP.
+ */
+export function featureContents(item: {
+  type: string;
+}): Array<{ value: string; domain: string | null }> {
+  const seen = new Set<string>();
+  const contents: Array<{ value: string; domain: string | null }> = [];
+  for (const { value, domain } of featureEntries(item.type, item)) {
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    contents.push({ value: value.slice(0, 150), domain });
+    if (contents.length === MAX_FEATURE_DETAILS) break;
+  }
+  return contents;
+}
+
 /** A SERP feature's content, bounded so a feature can't flood the response. */
 export function featureDetails(item: { type: string }): string[] | null {
-  const values = featureValues(item.type, item).filter(
-    (value): value is string => Boolean(value),
-  );
-  const details = [...new Set(values)].slice(0, MAX_FEATURE_DETAILS);
-  return details.length > 0
-    ? details.map((value) => value.slice(0, 150))
-    : null;
+  const details = featureContents(item).map(({ value }) => value);
+  return details.length > 0 ? details : null;
 }

@@ -103,6 +103,8 @@ async function updateProject(
     domain?: string;
     // Omitted leaves the market columns untouched.
     market?: { locationCode: number; languageCode: string };
+    // Omitted leaves the default device untouched.
+    defaultDevice?: "mobile" | "desktop";
   },
 ) {
   const [row] = await db
@@ -112,6 +114,7 @@ async function updateProject(
       brandName: input.brandName,
       domain: input.domain ?? null,
       ...input.market,
+      defaultDevice: input.defaultDevice,
     })
     .where(
       and(

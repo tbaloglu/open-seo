@@ -156,6 +156,11 @@ export const projects = pgTable(
     // The IndexNow key the site hosts at /{key}.txt. Public by design, so it
     // is stored as plain text. Null until IndexNow is first used.
     indexnowKey: text("indexnow_key"),
+    // Device the project's SERP reads use when a call names none: the SERP
+    // panel, get_serp_results, and new rank trackers.
+    defaultDevice: text("default_device", { enum: ["mobile", "desktop"] })
+      .notNull()
+      .default("mobile"),
   },
   (table) => [
     // Only the auto-created Default/null-domain project is a singleton. This

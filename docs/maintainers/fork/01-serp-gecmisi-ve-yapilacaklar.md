@@ -21,6 +21,7 @@ Bugün bunların hiçbiri kalıcı değil. `get_serp_results` sonucu 12 saat son
   - sayfadaki öğe türlerinin listesi.
 
   Geri kalan her şey atılır.
+
 - `rank_snapshots` her çalıştırmada, her kelime ve her cihaz için tek satır tutar: `position`, `url`, `serp_features` (türler, JSON).
 - Zamanlama zaten var: elle, günlük, haftalık, aylık.
 - Rakip izlemek için rakip alan adıyla ayrı bir takip açılabiliyor. Ancak her rakip aynı aramaları yeniden satın alır ve bu yöntem yeni rakip keşfetmez.
@@ -64,6 +65,7 @@ Boyut: Site başına 100 kelime ve haftalık kontrolle yılda yaklaşık 52.000 
 ### B. Proje varsayılan cihazı (veritabanı değişir, küçük)
 
 `projects` tablosuna `default_device` alanı eklenir (`mobile` ya da `desktop`, varsayılan `mobile`). Bu alanı şunlar kullanır:
+
 - SERP Analysis kartı,
 - `get_serp_results`,
 - yeni oluşturulan sıralama takibi.
@@ -89,11 +91,13 @@ Bugün yapılacaklar salt okunur bir rapor sayfasında duruyor. Önerilen yapı,
   - `update_seo_task_status`
 
   Claude rapor yazarken işleri bu araçlarla listeye ekler. Sahibi bir işi "seçildi" yapınca Claude onu site deposunun `docs/tasks.md` dosyasına aktarır. İş bittiğinde durumu ve etkisini günceller.
+
 - Aylık rapor, bir önceki aydan beri yapılan işleri ve GSC'deki etkilerini (öncesi ve sonrası) ayrı bir bölümde gösterir.
 
 ### D. Keyword gap aracı (veritabanı değişmez)
 
 Yeni MCP aracı: `get_keyword_gap(projectId, competitorDomain)`.
+
 - DataForSEO Labs'ten rakibin sıralandığı kelimeleri çeker (`get_ranked_keywords` ile aynı kaynak).
 - Projenin GSC aramalarını çeker (son 3 ay).
 - Bizim hiç görünmediğimiz ya da 20. sıranın gerisinde kaldığımız kelimeleri, hacim ve rakibin sırasıyla birlikte döndürür.
@@ -115,11 +119,11 @@ Bugün bu işi elle yaptık: dogaltursu.com için 76 kelimenin 72'si boşluk ç�
 
 Sıralama takibi bir okumayı standart kuyrukta yapar. İlk 40 sonuç için bir okuma 0,00255 $ tutar (`costPerRankCheckRead`). Sonuçları saklamak ek arama satın almaz.
 
-| Kapsam | Sıklık | Aylık |
-|---|---|---|
-| 1 site, 100 kelime, mobil | aylık | ≈ 0,26 $ |
-| 1 site, 100 kelime, mobil | haftalık | ≈ 1,10 $ |
-| 14 site, 100'er kelime, mobil | aylık | ≈ 3,60 $ |
+| Kapsam                        | Sıklık   | Aylık    |
+| ----------------------------- | -------- | -------- |
+| 1 site, 100 kelime, mobil     | aylık    | ≈ 0,26 $ |
+| 1 site, 100 kelime, mobil     | haftalık | ≈ 1,10 $ |
+| 14 site, 100'er kelime, mobil | aylık    | ≈ 3,60 $ |
 
 OpenSEO'nun kendi tahmin aracı, tekrar okuma ihtimali yüzünden en kötü durumu iki okuma sayar. Gerçek maliyet genelde bu tahminin yarısına yakın çıkar.
 
@@ -145,6 +149,7 @@ OpenSEO'nun kendi tahmin aracı, tekrar okuma ihtimali yüzünden en kötü duru
    - **Keşif** (yaklaşık %30): her ay yenilenir. GSC'de yeni beliren aramalar, keyword gap'ten gelen kelimeler ve "Diğer sorular"dan çıkan konular.
 
    Toplam sayıyı sitenin verisi belirler: son 3 ayda en az 20 gösterim alan ve ortalama sırası 30'dan iyi olan GSC aramalarının sayısı, 30 ile 200 arasında sınırlanır. Niş bir sitede (Sinastri) sayı kendiliğinden azalır; hızlı büyüyen sitede (Voleybol) artar. Sahibi site başına bu sayıyı elle de değiştirebilir.
+
 2. **Sıklık:** Sitedeki değişiklikler aylık yapılır. Ücretli sıralama takibi aylık çalışır. Ücretsiz kaynaklar (GSC, GA4) ise günlük izlenir; bkz. F.
 3. **Yapılacaklar durumları:** öneri, seçildi, yapılıyor, yapıldı, vazgeçildi.
 4. **Aşama sırası:** "Aşamalar" bölümündeki gibi.
@@ -152,6 +157,7 @@ OpenSEO'nun kendi tahmin aracı, tekrar okuma ihtimali yüzünden en kötü duru
 ### F. Günlük ücretsiz nabız (ek)
 
 GSC ve GA4 verisini Google zaten 16 ay saklıyor, bu yüzden kopyası tutulmaz. Günlük iş yalnızca **uyarı** üretir. Uyarı durumları:
+
 - bir sayfanın tıklamaları ya da gösterimleri son 7 günün ortalamasına göre belirgin düştü;
 - daha önce gösterim alan bir sayfa gösterim almaz oldu (Giresun il sayfasında olduğu gibi: dizinden çıkma, noindex);
 - yeni bir arama hızla gösterim almaya başladı;

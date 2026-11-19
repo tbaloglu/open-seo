@@ -42,6 +42,8 @@ import { addRankTrackingKeywordsTool } from "@/server/mcp/tools/add-rank-trackin
 import { createRankTrackerTool } from "@/server/mcp/tools/create-rank-tracker";
 import { estimateRankTrackerCostTool } from "@/server/mcp/tools/estimate-rank-tracker-cost";
 import { getRankHistoryTool } from "@/server/mcp/tools/get-rank-history";
+import { getSerpChangesTool } from "@/server/mcp/tools/get-serp-changes";
+import { getSerpHistoryTool } from "@/server/mcp/tools/get-serp-history";
 import { getRankTrackerTool } from "@/server/mcp/tools/get-rank-tracker";
 import { removeRankTrackingKeywordsTool } from "@/server/mcp/tools/remove-rank-tracking-keywords";
 import { pinRankTrackingKeywordsTool } from "@/server/mcp/tools/pin-rank-tracking-keywords";
@@ -296,6 +298,8 @@ export function registerOpenSeoTools(
   register(createRankTrackerTool);
   register(getRankTrackerTool);
   register(getRankHistoryTool);
+  register(getSerpHistoryTool);
+  register(getSerpChangesTool);
   register(addRankTrackingKeywordsTool);
   register(removeRankTrackingKeywordsTool);
   register(pinRankTrackingKeywordsTool);

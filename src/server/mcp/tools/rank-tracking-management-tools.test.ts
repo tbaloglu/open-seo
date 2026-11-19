@@ -60,6 +60,7 @@ describe("rank tracking management MCP tools", () => {
       domain: "openseo.so",
       locationCode: 2840,
       languageCode: "en",
+      defaultDevice: "desktop",
     });
     mocks.captureServerEvent.mockResolvedValue(undefined);
     mocks.refreshKeywordMetrics.mockResolvedValue({ updated: 1 });
@@ -76,7 +77,7 @@ describe("rank tracking management MCP tools", () => {
     expect(mocks.createConfig).toHaveBeenCalledWith(
       expect.objectContaining({
         domain: "openseo.so",
-        devices: "mobile",
+        devices: "desktop",
         serpDepth: 40,
         scheduleInterval: "manual",
       }),

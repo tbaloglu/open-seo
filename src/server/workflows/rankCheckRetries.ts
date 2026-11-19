@@ -6,6 +6,7 @@ import type {
 } from "@/server/lib/dataforseo";
 import { MAX_READS_PER_CHECK } from "@/shared/rank-tracking";
 import { pgStep } from "@/server/workflows/pgStep";
+import { dropSerpHistory } from "@/server/features/serp-history/services/saveSerpHistory";
 import {
   COLLECT_STEP_CONFIG,
   expandToTaskInputs,
@@ -176,13 +177,15 @@ async function dropSuspectMisses(
       bestPosition(pairs[index]) === null && ranked.has(task.keywordId),
   );
   if (suspect.length === 0) return;
-  await RankTrackingRepository.deleteNotFoundSnapshots(
-    suspect.map((task) => ({
-      runId,
-      trackingKeywordId: task.keywordId,
-      device: task.device,
-    })),
-  );
+  const keys = suspect.map((task) => ({
+    runId,
+    trackingKeywordId: task.keywordId,
+    device: task.device,
+  }));
+  await RankTrackingRepository.deleteNotFoundSnapshots(keys);
+  // Fork: the page of an unconfirmed miss is likely the fake page, so it
+  // isn't kept as history either.
+  await dropSerpHistory(runId, keys);
 }
 
 /**

@@ -206,6 +206,7 @@ describe("rank check task queue", () => {
         url: "https://www.example.com/page",
         serpFeatures: ["organic"],
       },
+      items: [expect.objectContaining({ type: "organic", rank_group: 3 })],
     });
   });
   it("credits results wrapped in a google.com/goto redirect to the site in their breadcrumb", async () => {
