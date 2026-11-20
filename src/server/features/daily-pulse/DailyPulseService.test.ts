@@ -109,14 +109,20 @@ beforeEach(async () => {
   vi.setSystemTime(NOW);
   await testDb.client.executeMultiple(`
     DELETE FROM gsc_daily_page;
+    DELETE FROM gsc_daily_site;
     DELETE FROM ga4_daily_site;
     DELETE FROM seo_tasks;
     DELETE FROM search_archive_periods;
     INSERT INTO search_archive_periods (project_id, source, month, fetched_through, complete, row_count, fetched_at)
       VALUES ('project', 'gsc_page', '2026-10', '2026-10-31', 1, 1, '2026-11-05T00:00:00.000Z'),
              ('project', 'gsc_page', '2026-11', '2026-11-19', 0, 1, '2026-11-20T00:00:00.000Z'),
+             ('project', 'gsc_site', '2026-10', '2026-10-31', 1, 1, '2026-11-05T00:00:00.000Z'),
+             ('project', 'gsc_site', '2026-11', '2026-11-19', 0, 1, '2026-11-20T00:00:00.000Z'),
              ('project', 'ga4_site', '2026-10', '2026-10-31', 1, 1, '2026-11-05T00:00:00.000Z'),
              ('project', 'ga4_site', '2026-11', '2026-11-19', 0, 1, '2026-11-20T00:00:00.000Z');
+    -- The site has had Search Console data since before the baseline.
+    INSERT INTO gsc_daily_site (project_id, date, device, clicks, impressions, ctr, position)
+      VALUES ('project', '2026-09-01', 'MOBILE', 0, 1, 0, 9);
   `);
   getProjectForOrganization.mockImplementation(
     async (organizationId: string, projectId: string) =>
@@ -172,8 +178,8 @@ describe("daily pulse rules", () => {
   });
 
   it.each([
-    ["new page reaching 100 impressions", 0, 100, true],
-    ["new page at 99 impressions", 0, 99, false],
+    ["a page quiet in the baseline reaching 100 impressions", 0, 100, true],
+    ["a page quiet in the baseline at 99 impressions", 0, 99, false],
     ["exactly +100% (200 → 100)", 200, 100, true],
     ["just under +100% (204 → 101)", 204, 101, false],
   ])("rising page: %s", async (_name, baseline, recent, fires) => {
