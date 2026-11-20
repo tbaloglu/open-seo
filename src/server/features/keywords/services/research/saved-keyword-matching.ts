@@ -97,8 +97,11 @@ export async function copyResearchMetrics(
     if (!source) return [];
     if (
       target &&
-      parseStoredTimestamp(source.fetchedAt) <=
+      // Fails closed: an unreadable timestamp never overwrites.
+      !(
+        parseStoredTimestamp(source.fetchedAt) >
         parseStoredTimestamp(target.fetchedAt)
+      )
     )
       return [];
     return [{ source, stored }];

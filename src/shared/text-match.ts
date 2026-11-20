@@ -43,7 +43,9 @@ export function isTurkicLanguage(languageCode: string) {
  */
 export function lowercaseKeyword(text: string, languageCode: string) {
   const lower = isTurkicLanguage(languageCode)
-    ? text.toLocaleLowerCase(languageCode)
+    ? // Turkish and Azerbaijani share the dotted/dotless i rules; a fixed
+      // tag also avoids a RangeError on a malformed language code.
+      text.toLocaleLowerCase("tr")
     : text.toLowerCase();
   return lower.normalize("NFC").replace(/i\u0307/g, "i");
 }
