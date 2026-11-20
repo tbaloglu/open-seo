@@ -29,6 +29,11 @@ export function foldedTermKey(term: string) {
     .trim();
 }
 
+/** Turkish or Azerbaijani, the languages that pair I with ı and İ with i. */
+export function isTurkicLanguage(languageCode: string) {
+  return /^(tr|az)\b/i.test(languageCode);
+}
+
 /**
  * A keyword lower-cased the way its language writes it. Turkish and
  * Azerbaijani pair I with ı and İ with i, so "KIRMIZI" is "kırmızı" there and
@@ -37,7 +42,7 @@ export function foldedTermKey(term: string) {
  * but never equals "i".
  */
 export function lowercaseKeyword(text: string, languageCode: string) {
-  const lower = /^(tr|az)\b/i.test(languageCode)
+  const lower = isTurkicLanguage(languageCode)
     ? text.toLocaleLowerCase(languageCode)
     : text.toLowerCase();
   return lower.normalize("NFC").replace(/i\u0307/g, "i");

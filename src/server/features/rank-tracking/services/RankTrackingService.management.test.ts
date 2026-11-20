@@ -113,18 +113,28 @@ describe("RankTrackingService management invariants", () => {
     ]);
   });
 
-  it("does not re-add a Turkish keyword stored by the older lowercasing", async () => {
+  it("does not re-add a keyword stored by the older lowercasing", async () => {
     mocks.getConfigById.mockResolvedValue({ ...config, languageCode: "tr" });
-    // "İstanbul".toLowerCase() keeps a combining dot above the i.
     mocks.getKeywordsForConfig.mockResolvedValue([
-      { id: "kw_1", keyword: "İstanbul avukat".toLowerCase() },
+      // "İstanbul".toLowerCase() keeps a combining dot above the i.
+      { id: "kw_1", keyword: "i\u0307stanbul avukat" },
+      { id: "kw_2", keyword: "isparta otel", createdAt: "2026-11-01 00:00:00" },
+      // After the cutoff, "kir" is the word kir, not an old "KIR".
+      { id: "kw_3", keyword: "kir evi", createdAt: "2026-12-01T00:00:00.000Z" },
     ]);
+    mocks.addKeywordsToConfig.mockImplementation(
+      async (rows: Array<{ id: string }>) => rows.map((row) => row.id),
+    );
 
-    await RankTrackingService.addKeywords(tracker, ["İstanbul avukat"], {
-      kind: "direct_user_action",
-    });
+    await RankTrackingService.addKeywords(
+      tracker,
+      ["İstanbul avukat", "istanbul avukat", "Isparta otel", "KIR evi"],
+      { kind: "direct_user_action" },
+    );
 
-    expect(mocks.addKeywordsToConfig).not.toHaveBeenCalled();
+    expect(mocks.addKeywordsToConfig).toHaveBeenCalledWith([
+      expect.objectContaining({ keyword: "kır evi" }),
+    ]);
   });
 
   it("keeps case as typed when matchCase is set, alongside the lowercase keyword", async () => {
@@ -325,16 +335,21 @@ describe("RankTrackingService management invariants", () => {
     expect(mocks.fetchKeywordMetricsForList).not.toHaveBeenCalled();
   });
 
-  it("matches metrics back to a cased keyword and its lowercase twin", async () => {
+  it("matches metrics back to cased, lowercase and stray-dot keywords", async () => {
     mocks.isHostedServerAuthMode.mockResolvedValue(false);
     mocks.createDataforseoClient.mockReturnValue({});
     mocks.getKeywordsForConfig.mockResolvedValue([
       { id: "kw_1", keyword: "Nodex" },
       { id: "kw_2", keyword: "nodex" },
+      // Stored by plain toLowerCase(), and "İstanbul" typed on an English
+      // tracker: both are "istanbul".
+      { id: "kw_3", keyword: "i\u0307stanbul" },
+      { id: "kw_4", keyword: "İstanbul", matchCase: true },
     ]);
     // DataForSEO echoes keywords back lowercased.
     mocks.fetchKeywordMetricsForList.mockResolvedValue([
       { keyword: "nodex", searchVolume: 90, keywordDifficulty: 12, cpc: 0.5 },
+      { keyword: "istanbul", searchVolume: 40 },
     ]);
 
     await expect(
@@ -343,14 +358,16 @@ describe("RankTrackingService management invariants", () => {
         "project_1",
         billingCustomer,
       ),
-    ).resolves.toEqual({ updated: 2 });
+    ).resolves.toEqual({ updated: 4 });
     expect(mocks.fetchKeywordMetricsForList).toHaveBeenCalledWith(
       {},
-      expect.objectContaining({ keywords: ["nodex"] }),
+      expect.objectContaining({ keywords: ["nodex", "istanbul"] }),
     );
     expect(mocks.updateKeywordMetrics).toHaveBeenCalledWith([
       expect.objectContaining({ id: "kw_1", searchVolume: 90 }),
       expect.objectContaining({ id: "kw_2", searchVolume: 90 }),
+      expect.objectContaining({ id: "kw_3", searchVolume: 40 }),
+      expect.objectContaining({ id: "kw_4", searchVolume: 40 }),
     ]);
   });
 

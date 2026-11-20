@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/client/components/ui/button";
@@ -15,6 +15,8 @@ import {
 import { Input } from "@/client/components/ui/input";
 import { Label } from "@/client/components/ui/label";
 import { Textarea } from "@/client/components/ui/textarea";
+import { projectsQueryOptions } from "@/client/features/projects/projectQueries";
+import { lowercaseKeyword } from "@/shared/text-match";
 import {
   refreshSavedKeywordMetrics,
   saveKeywords,
@@ -27,6 +29,11 @@ const SAVE_CHUNK_SIZE = 500;
 export function ImportKeywordsButton({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
+  // Saves go to the project's market, so duplicates are judged in its
+  // language: Turkish "ISPARTA" and "ısparta" are one keyword.
+  const { data: projects } = useQuery(projectsQueryOptions());
+  const languageCode =
+    projects?.find((project) => project.id === projectId)?.languageCode ?? "en";
 
   const importMutation = useMutation({
     mutationFn: async (input: {
@@ -69,6 +76,7 @@ export function ImportKeywordsButton({ projectId }: { projectId: string }) {
       </Button>
       {open ? (
         <ImportKeywordsDialog
+          languageCode={languageCode}
           isPending={importMutation.isPending}
           onClose={() => setOpen(false)}
           onImport={(input) => importMutation.mutate(input)}
@@ -85,7 +93,7 @@ const MAX_IMPORT_KEYWORDS = 2000;
  * One keyword per line. A pasted CSV keeps its first column, and a header
  * named "keyword" is skipped.
  */
-function parseKeywordList(text: string): string[] {
+function parseKeywordList(text: string, languageCode: string): string[] {
   const seen = new Set<string>();
   const keywords: string[] = [];
   for (const line of text.split(/\r?\n/)) {
@@ -93,7 +101,7 @@ function parseKeywordList(text: string): string[] {
       .trim()
       .replace(/^"(.*)"$/, "$1")
       .trim();
-    const key = keyword.toLocaleLowerCase();
+    const key = lowercaseKeyword(keyword, languageCode);
     if (!keyword || key === "keyword" || key === "keywords" || seen.has(key))
       continue;
     seen.add(key);
@@ -103,10 +111,12 @@ function parseKeywordList(text: string): string[] {
 }
 
 function ImportKeywordsDialog({
+  languageCode,
   isPending,
   onClose,
   onImport,
 }: {
+  languageCode: string;
   isPending: boolean;
   onClose: () => void;
   onImport: (input: {
@@ -122,7 +132,7 @@ function ImportKeywordsDialog({
   const tagId = useId();
   const statsId = useId();
 
-  const keywords = parseKeywordList(text);
+  const keywords = parseKeywordList(text, languageCode);
   const tooMany = keywords.length > MAX_IMPORT_KEYWORDS;
   const canImport = !isPending && keywords.length > 0 && !tooMany;
 

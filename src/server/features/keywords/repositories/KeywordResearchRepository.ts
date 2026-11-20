@@ -19,6 +19,7 @@ import {
   savedKeywords,
 } from "@/db/schema";
 import { lowercaseKeyword } from "@/shared/text-match";
+import { SavedKeywordLegacyQueries } from "./SavedKeywordLegacyQueries";
 import {
   SavedKeywordTagsRepository,
   type SavedKeywordTagRecord,
@@ -71,8 +72,10 @@ async function upsertKeywordMetric(params: {
   keywordDifficulty: number | null;
   intent: string | null;
   monthlySearchesJson: string;
+  /** When the numbers were fetched, if not now (a copy of older metrics). */
+  fetchedAt?: string;
 }) {
-  const fetchedAt = new Date().toISOString();
+  const fetchedAt = params.fetchedAt ?? new Date().toISOString();
 
   await db
     .insert(keywordMetrics)
@@ -359,25 +362,6 @@ async function listSavedKeywordRowsByKeywords(params: {
   return rows;
 }
 
-/** Every saved keyword's text in one project market. */
-async function listSavedKeywordTexts(params: {
-  projectId: string;
-  locationCode: number;
-  languageCode: string;
-}) {
-  const rows = await db
-    .select({ keyword: savedKeywords.keyword })
-    .from(savedKeywords)
-    .where(
-      and(
-        eq(savedKeywords.projectId, params.projectId),
-        eq(savedKeywords.locationCode, params.locationCode),
-        eq(savedKeywords.languageCode, params.languageCode),
-      ),
-    );
-  return rows.map((row) => row.keyword);
-}
-
 // D1 caps bound parameters at 100 per statement; leave headroom for the
 // projectId filter.
 const QUERY_CHUNK_SIZE = 80;
@@ -410,7 +394,9 @@ export const KeywordResearchRepository = {
   saveKeywordsToProject,
   countSavedKeywordsForOrganization,
   listSavedKeywordRowsByKeywords,
-  listSavedKeywordTexts,
+  listSavedKeywordsWithStrayDot:
+    SavedKeywordLegacyQueries.listSavedKeywordsWithStrayDot,
+  getKeywordMetric: SavedKeywordLegacyQueries.getKeywordMetric,
   listSavedKeywordsByProject,
   addTagsToSavedKeywords: SavedKeywordTagsRepository.addTagsToSavedKeywords,
   replaceTagsForSavedKeywords:

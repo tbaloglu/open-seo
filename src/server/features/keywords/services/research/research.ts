@@ -157,7 +157,10 @@ async function fetchAutoRows(
     input.resultLimit,
   );
 
-  if (countNonSeedKeywords(blended, seedKeyword) >= MIN_NON_SEED_FOR_AUTO) {
+  if (
+    countNonSeedKeywords(blended, seedKeyword, input.languageCode) >=
+    MIN_NON_SEED_FOR_AUTO
+  ) {
     return { rows: blended, source: "blended", usedFallback: false };
   }
 

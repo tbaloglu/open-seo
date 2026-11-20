@@ -315,24 +315,27 @@ function matchesBrand(
   );
 }
 
-function mentionRegex(brand: string): RegExp {
+const escapeRegExpChar = (char: string) =>
+  char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const isWordChar = (char: string) => /^[\p{L}\p{M}\p{N}_]$/u.test(char);
+
+function mentionRegex(rawBrand: string): RegExp {
   // Case-insensitive match on the brand string, with Turkish i-letters folded
   // (run it on NFD text), and boundary guards only on sides that end in a
-  // letter or digit — a boundary fails for brands like "C++" or "AT&T" where
-  // the terminal char is not one. There we guard with a negative lookaround
-  // against that same char so "C++" doesn't match "C+++".
-  const firstEscaped = brand[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const lastEscaped = brand[brand.length - 1].replace(
-    /[.*+?^${}()|[\]\\]/g,
-    "\\$&",
-  );
+  // letter, mark or digit — a boundary fails for brands like "C++" or "AT&T"
+  // where the terminal char is not one. There we guard with a negative
+  // lookaround against that same char so "C++" doesn't match "C+++".
+  const brand = rawBrand.normalize("NFC");
+  const chars = Array.from(brand);
   const wordChar = "[\\p{L}\\p{M}\\p{N}_]";
-  const leading = /^[\p{L}\p{N}_]/u.test(brand)
+  const first = chars[0];
+  const last = chars[chars.length - 1];
+  const leading = isWordChar(first)
     ? `(?<!${wordChar})`
-    : `(?<!${firstEscaped})`;
-  const trailing = /[\p{L}\p{N}_]$/u.test(brand)
+    : `(?<!${escapeRegExpChar(first)})`;
+  const trailing = isWordChar(last)
     ? `(?!${wordChar})`
-    : `(?!${lastEscaped})`;
+    : `(?!${escapeRegExpChar(last)})`;
   return new RegExp(`${leading}${foldedTermSource(brand)}${trailing}`, "iu");
 }
 

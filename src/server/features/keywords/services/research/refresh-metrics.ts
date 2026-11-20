@@ -59,6 +59,7 @@ export async function refreshSavedKeywordMetrics(
         chunk.map((r) => {
           const metric = byKeyword.get(lower(r.row.keyword));
           if (!metric) return Promise.resolve();
+          updated++;
           return KeywordResearchRepository.upsertKeywordMetric({
             projectId: input.projectId,
             keyword: r.row.keyword,
@@ -74,8 +75,6 @@ export async function refreshSavedKeywordMetrics(
         }),
       );
     }
-
-    updated += byKeyword.size;
   }
 
   return { updated };

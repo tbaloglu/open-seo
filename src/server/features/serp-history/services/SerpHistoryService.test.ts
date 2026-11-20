@@ -50,11 +50,14 @@ beforeAll(async () => {
              ('one', 'project', 'one.example', 'mobile', 10, 'tr'),
              ('elsewhere', 'other', 'openseo.so', 'mobile', 10, 'tr'),
              ('grow', 'project', 'grow.example', 'mobile', 10, 'tr'),
-             ('empty', 'project', 'empty.example', 'mobile', 10, 'tr');
+             ('empty', 'project', 'empty.example', 'mobile', 10, 'tr'),
+             ('legacy', 'project', 'legacy.example', 'mobile', 10, 'tr');
     INSERT INTO rank_tracking_keywords (id, config_id, keyword)
       VALUES ('kw', 'config', 'turşu kavanozu'), ('kw-new', 'config', 'turşu suyu'),
              ('kw-other', 'elsewhere', 'turşu kavanozu'),
-             ('kw-upper', 'grow', 'Turşu'), ('kw-lower', 'grow', 'turşu');
+             ('kw-upper', 'grow', 'Turşu'), ('kw-lower', 'grow', 'turşu'),
+             ('kw-dotted', 'legacy', 'i\u0307stanbul avukat'),
+             ('kw-isparta', 'legacy', 'isparta otel');
     ${run("first", "config", 1)}
     ${run("second", "config", 2)}
     ${run("latest", "config", 3)}
@@ -266,6 +269,16 @@ describe("SERP history", () => {
       ["second", true],
       ["first", false],
     ]);
+  });
+
+  it.each([
+    ["the exact text before its lowercase twin", "grow", "Turşu", "kw-upper"],
+    ["an older row with a stray dot", "legacy", "İstanbul avukat", "kw-dotted"],
+    ["what plain toLowerCase() stored", "legacy", "ISPARTA otel", "kw-isparta"],
+  ])("finds %s", async (_case, trackerId, keyword, id) => {
+    const result = await history({ trackerId, keyword });
+
+    expect(result.keyword.id).toBe(id);
   });
 
   it("finds the keyword by id on a match-case tracker", async () => {
