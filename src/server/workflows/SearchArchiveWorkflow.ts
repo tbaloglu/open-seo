@@ -3,6 +3,8 @@ import {
   type WorkflowEvent,
   type WorkflowStep,
 } from "cloudflare:workers";
+import { NonRetryableError } from "cloudflare:workflows";
+import { isPermanentArchiveError } from "@/server/features/search-archive/archiveFetch";
 import {
   SearchArchiveService,
   type ArchiveJobPayload,
@@ -23,6 +25,13 @@ const FETCH_STEP = {
   },
   timeout: "10 minutes" as const,
 };
+
+/** The plain message for the status note, without the engine's prefixes. */
+const errorMessage = (error: unknown) =>
+  (error instanceof Error ? error.message : String(error)).replace(
+    /^(Error: )?(NonRetryableError: )?/,
+    "",
+  );
 
 /**
  * Copies a project's Search Console and Google Analytics history into the
@@ -51,7 +60,13 @@ export class SearchArchiveWorkflow extends WorkflowEntrypoint<
             const rows = await SearchArchiveService.fetchPeriod(
               projectId,
               fetch,
-            );
+            ).catch((error: unknown) => {
+              // A revoked grant or lost property fails the run at once
+              // instead of waiting out the retries.
+              throw isPermanentArchiveError(error)
+                ? new NonRetryableError(errorMessage(error))
+                : error;
+            });
             await SearchArchiveService.recordProgress(
               projectId,
               runId,
@@ -77,7 +92,7 @@ export class SearchArchiveWorkflow extends WorkflowEntrypoint<
         SearchArchiveService.finishRun(projectId, runId, {
           ok: false,
           rowsWritten,
-          note: describeError(error),
+          note: errorMessage(error),
         }),
       );
     }

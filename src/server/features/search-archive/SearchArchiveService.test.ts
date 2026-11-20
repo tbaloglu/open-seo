@@ -1,6 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { getArchivedSearchPerformanceTool } from "@/server/mcp/tools/search-archive-tools";
 import { makeToolContext } from "@/server/mcp/tools/tool-test-support";
+import { Ga4ReportError } from "@/server/lib/ga4Errors";
+import { GscApiError, GscTokenError } from "@/server/lib/gscErrors";
+import { isPermanentArchiveError } from "./archiveFetch";
 import { SearchArchiveService } from "./SearchArchiveService";
 
 const { testDb, mocks } = await vi.hoisted(async () => {
@@ -192,5 +195,20 @@ describe("search archive", () => {
         context,
       ),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("retries quota and outages but not a revoked grant or lost property", () => {
+    expect(isPermanentArchiveError(new GscApiError(429, "quota"))).toBe(false);
+    expect(isPermanentArchiveError(new GscApiError(503, "down"))).toBe(false);
+    expect(
+      isPermanentArchiveError(new Ga4ReportError("ga4_quota_exhausted", "q")),
+    ).toBe(false);
+    expect(isPermanentArchiveError(new GscTokenError("revoked"))).toBe(true);
+    expect(isPermanentArchiveError(new GscApiError(403, "denied"))).toBe(true);
+    expect(
+      isPermanentArchiveError(
+        new Ga4ReportError("ga4_property_inaccessible", "gone"),
+      ),
+    ).toBe(true);
   });
 });

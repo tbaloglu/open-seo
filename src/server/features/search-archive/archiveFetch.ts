@@ -4,6 +4,12 @@ import { mapGa4ReportError } from "@/server/features/ga4/services/Ga4ReportingSe
 import { GscService } from "@/server/features/gsc/services/GscService";
 import type { GscDimension } from "@/server/features/gsc/searchAnalytics";
 import { AppError } from "@/server/lib/errors";
+import { Ga4ReportError } from "@/server/lib/ga4Errors";
+import {
+  GscApiError,
+  GscNotConnectedError,
+  GscTokenError,
+} from "@/server/lib/gscErrors";
 import {
   createGa4DataClient,
   type Ga4RunReportRequest,
@@ -124,6 +130,30 @@ function ga4Date(value: string | number | null): string {
 
 const metric = (value: string | number | null) =>
   typeof value === "number" ? Math.round(value) : 0;
+
+/**
+ * Failures a retry cannot fix: a revoked grant, a lost property, a source
+ * that is no longer connected. Quota, timeouts and outages are worth retrying.
+ */
+export function isPermanentArchiveError(error: unknown): boolean {
+  if (
+    error instanceof GscTokenError ||
+    error instanceof GscNotConnectedError ||
+    error instanceof AppError
+  ) {
+    return true;
+  }
+  if (error instanceof GscApiError) {
+    return error.apiDisabled || [400, 401, 403, 404].includes(error.status);
+  }
+  if (error instanceof Ga4ReportError) {
+    return (
+      error.code !== "ga4_quota_exhausted" &&
+      error.code !== "ga4_upstream_unavailable"
+    );
+  }
+  return false;
+}
 
 async function runGa4Report(
   projectId: string,
