@@ -72,6 +72,10 @@ describe("RankTrackingService management invariants", () => {
     // explicit defaults; the plan tests override them per case.
     mocks.isHostedServerAuthMode.mockResolvedValue(true);
     mocks.customerHasPaidPlan.mockResolvedValue(true);
+    mocks.addKeywordsToConfig.mockImplementation(
+      async (rows: Array<{ id: string }>) => rows.map((row) => row.id),
+    );
+    mocks.createDataforseoClient.mockReturnValue({});
   });
 
   it("reports only keyword rows actually inserted", async () => {
@@ -97,9 +101,6 @@ describe("RankTrackingService management invariants", () => {
   it("lowercases with the tracker's language, so Turkish I and İ keep their letters", async () => {
     mocks.getConfigById.mockResolvedValue({ ...config, languageCode: "tr" });
     mocks.getKeywordsForConfig.mockResolvedValue([]);
-    mocks.addKeywordsToConfig.mockImplementation(
-      async (rows: Array<{ id: string }>) => rows.map((row) => row.id),
-    );
 
     await RankTrackingService.addKeywords(
       tracker,
@@ -122,9 +123,6 @@ describe("RankTrackingService management invariants", () => {
       // After the cutoff, "kir" is the word kir, not an old "KIR".
       { id: "kw_3", keyword: "kir evi", createdAt: "2026-12-01T00:00:00.000Z" },
     ]);
-    mocks.addKeywordsToConfig.mockImplementation(
-      async (rows: Array<{ id: string }>) => rows.map((row) => row.id),
-    );
 
     await RankTrackingService.addKeywords(
       tracker,
@@ -141,9 +139,6 @@ describe("RankTrackingService management invariants", () => {
     mocks.getKeywordsForConfig.mockResolvedValue([
       { id: "kw_1", keyword: "nodex" },
     ]);
-    mocks.addKeywordsToConfig.mockImplementation(
-      async (rows: Array<{ id: string }>) => rows.map((row) => row.id),
-    );
 
     await RankTrackingService.addKeywords(
       tracker,
@@ -179,9 +174,6 @@ describe("RankTrackingService management invariants", () => {
         { keyword: "seo" },
         { keyword: "technical seo" },
       ]);
-    mocks.addKeywordsToConfig.mockImplementation(
-      async (rows: Array<{ id: string }>) => rows.map((row) => row.id),
-    );
 
     await expect(
       RankTrackingService.addKeywords(tracker, ["seo", "technical seo"], {
@@ -207,9 +199,6 @@ describe("RankTrackingService management invariants", () => {
         { keyword: "technical seo" },
         { keyword: "concurrent add" },
       ]);
-    mocks.addKeywordsToConfig.mockImplementation(
-      async (rows: Array<{ id: string }>) => rows.map((row) => row.id),
-    );
     mocks.removeKeywordsFromConfig.mockImplementation(
       async (ids: string[]) => ids,
     );
@@ -237,9 +226,6 @@ describe("RankTrackingService management invariants", () => {
       scheduleInterval: "manual",
     });
     mocks.getKeywordsForConfig.mockResolvedValue([]);
-    mocks.addKeywordsToConfig.mockImplementation(
-      async (rows: Array<{ id: string }>) => rows.map((row) => row.id),
-    );
 
     await expect(
       RankTrackingService.addKeywords(tracker, ["seo"], {
@@ -337,7 +323,6 @@ describe("RankTrackingService management invariants", () => {
 
   it("matches metrics back to cased, lowercase and stray-dot keywords", async () => {
     mocks.isHostedServerAuthMode.mockResolvedValue(false);
-    mocks.createDataforseoClient.mockReturnValue({});
     mocks.getKeywordsForConfig.mockResolvedValue([
       { id: "kw_1", keyword: "Nodex" },
       { id: "kw_2", keyword: "nodex" },
@@ -371,6 +356,32 @@ describe("RankTrackingService management invariants", () => {
     ]);
   });
 
+  it("fetches keyword stats for a city-code tracker by its country", async () => {
+    mocks.isHostedServerAuthMode.mockResolvedValue(false);
+    mocks.fetchKeywordMetricsForList.mockResolvedValue([]);
+    // Saved before location codes were validated: Curitiba's own code.
+    mocks.getConfigById.mockResolvedValue({
+      ...config,
+      locationCode: 1001634,
+      languageCode: "pt",
+      locationName: "Curitiba,State of Parana,Brazil",
+    });
+
+    await RankTrackingService.refreshKeywordMetrics(
+      "config_1",
+      "project_1",
+      billingCustomer,
+    );
+    expect(mocks.fetchKeywordMetricsForList).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({
+        locationCode: 2076,
+        languageCode: "pt",
+        locationName: "Curitiba,State of Parana,Brazil",
+      }),
+    );
+  });
+
   it("rejects missing or foreign trackers with NOT_FOUND before mutation", async () => {
     mocks.getConfigById.mockResolvedValue(null);
 
@@ -388,9 +399,6 @@ describe("RankTrackingService keyword limit", () => {
       scheduleInterval: "manual",
     });
     mocks.isHostedServerAuthMode.mockResolvedValue(true);
-    mocks.addKeywordsToConfig.mockImplementation(
-      async (rows: Array<{ id: string }>) => rows.map((row) => row.id),
-    );
   });
 
   it.each([
