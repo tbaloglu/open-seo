@@ -6,8 +6,6 @@ import {
   expectedFrom,
   fellBy,
   MAX_ALERTS_PER_RULE,
-  RECENT_DAYS,
-  BASELINE_DAYS,
   roseBy,
   type PulseAlert,
   type Windows,
@@ -16,7 +14,7 @@ import {
 // The daily pulse's page rules, over Search Console's daily page rows. Google
 // reports a page under the host it indexed, and a site moving between
 // example.com and www.example.com shows the same page under both, so pages
-// are folded by host-less address before they are judged.
+// are folded by address without "www." and protocol before they are judged.
 
 /** (a) A page's clicks fell at least this much against the baseline pace. */
 const TRAFFIC_DROP_PERCENT = 50;
@@ -40,9 +38,8 @@ type PageRow = Awaited<
 >[number];
 
 type FoldedPage = {
-  /** The variant Google reported most recently: the page's current URL. */
+  /** The variant with most recent impressions: the page's current URL. */
   url: string;
-  firstDate: string;
   baselineClicks: number;
   recentClicks: number;
   baselineImpressions: number;
@@ -58,25 +55,35 @@ function hostOf(url: string): string {
   }
 }
 
-function foldPages(rows: PageRow[], firstDates: Map<string, string>) {
+function protocolOf(url: string): string {
+  try {
+    return new URL(url).protocol;
+  } catch {
+    return "";
+  }
+}
+
+function foldPages(rows: PageRow[]): FoldedPage[] {
   const byKey = new Map<string, PageRow[]>();
   for (const row of rows) {
     const key = canonicalKey(row.page);
-    byKey.set(key, [...(byKey.get(key) ?? []), row]);
+    const variants = byKey.get(key);
+    if (variants) variants.push(row);
+    else byKey.set(key, [row]);
   }
   return [...byKey.values()].map((variants): FoldedPage => {
+    // Where the page gets its impressions now; a stray row on the old
+    // address does not make that address current.
     const [current] = sortBy(
       variants,
-      [(row) => row.lastDate ?? "", "desc"],
       [(row) => row.recentImpressions, "desc"],
+      [(row) => row.lastDate ?? "", "desc"],
+      [(row) => row.baselineImpressions, "desc"],
     );
     const sum = (field: keyof Omit<PageRow, "page" | "lastDate">) =>
       variants.reduce((total, row) => total + row[field], 0);
     return {
       url: current.page,
-      firstDate: variants
-        .map((row) => firstDates.get(row.page) ?? "")
-        .reduce((a, b) => (a < b ? a : b)),
       baselineClicks: sum("baselineClicks"),
       recentClicks: sum("recentClicks"),
       baselineImpressions: sum("baselineImpressions"),
@@ -86,18 +93,32 @@ function foldPages(rows: PageRow[], firstDates: Map<string, string>) {
   });
 }
 
-/** The host holding at least HOST_SHARE_PERCENT of a window's impressions. */
-function dominantHost(
+/** Impressions per host (case-folded) in one window. */
+function impressionsByHost(
   variants: PageRow[],
   field: "baselineImpressions" | "recentImpressions",
-): string | null {
-  const total = variants.reduce((sum, row) => sum + row[field], 0);
-  if (total < HOST_CHANGE_MIN_IMPRESSIONS) return null;
-  const top = sortBy(variants, [(row) => row[field], "desc"])[0];
-  return top[field] * 100 >= total * HOST_SHARE_PERCENT
-    ? hostOf(top.page)
-    : null;
+): Map<string, number> {
+  const byHost = new Map<string, number>();
+  for (const row of variants) {
+    const host = hostOf(row.page);
+    if (host) byHost.set(host, (byHost.get(host) ?? 0) + row[field]);
+  }
+  return byHost;
 }
+
+/** The host holding at least HOST_SHARE_PERCENT of a window's impressions. */
+function dominantHost(byHost: Map<string, number>): string | null {
+  const total = [...byHost.values()].reduce((sum, value) => sum + value, 0);
+  if (total < HOST_CHANGE_MIN_IMPRESSIONS) return null;
+  const [host, impressions] = sortBy(
+    [...byHost.entries()],
+    [([, value]) => value, "desc"],
+  )[0];
+  return impressions * 100 >= total * HOST_SHARE_PERCENT ? host : null;
+}
+
+const hostCount = (page: FoldedPage) =>
+  new Set(page.variants.map((row) => hostOf(row.page))).size;
 
 /**
  * One alert per project when pages moved between the www and the bare host:
@@ -109,8 +130,13 @@ function hostChangeAlert(
   windows: Windows,
 ): PulseAlert | null {
   const moved = pages.flatMap((page) => {
-    const before = dominantHost(page.variants, "baselineImpressions");
-    const after = dominantHost(page.variants, "recentImpressions");
+    if (page.variants.length < 2 || hostCount(page) < 2) return [];
+    const before = dominantHost(
+      impressionsByHost(page.variants, "baselineImpressions"),
+    );
+    const after = dominantHost(
+      impressionsByHost(page.variants, "recentImpressions"),
+    );
     return before && after && before !== after ? [{ page, before, after }] : [];
   });
   if (moved.length === 0) return null;
@@ -144,24 +170,69 @@ function hostChangeAlert(
   });
 }
 
-const pageSource = (page: FoldedPage) =>
-  `Search Console, sayfa ${page.url}${page.variants.length > 1 ? " (www ve www'siz adresler birlikte)" : ""} (OpenSEO arşivi, gsc_daily_page)`;
+function pageSource(page: FoldedPage): string {
+  const folded =
+    hostCount(page) > 1
+      ? " (www ve www'siz adresler birlikte)"
+      : new Set(page.variants.map((row) => protocolOf(row.page))).size > 1
+        ? " (http ve https adresleri birlikte)"
+        : "";
+  return `Search Console, sayfa ${page.url}${folded} (OpenSEO arşivi, gsc_daily_page)`;
+}
+
+/** Every address Google could report the page under: www or not, http(s). */
+function addressVariants(page: FoldedPage): string[] {
+  const urls = new Set(page.variants.map((row) => row.page));
+  for (const row of page.variants) {
+    try {
+      const parsed = new URL(row.page);
+      const bare = parsed.hostname.toLowerCase().replace(/^www\./, "");
+      for (const protocol of ["http:", "https:"]) {
+        for (const host of [bare, `www.${bare}`]) {
+          urls.add(`${protocol}//${host}${parsed.pathname}${parsed.search}`);
+        }
+      }
+    } catch {
+      // An unparsable page is only looked up as reported.
+    }
+  }
+  return [...urls];
+}
+
+/**
+ * Rising pages that already existed when the baseline began, under any of
+ * their addresses. A page first seen later is new, not rising: its baseline is
+ * short, and scaling it would inflate the rise. Only the candidates are
+ * looked up, and a page with no row by then counts as new.
+ */
+async function establishedRising(
+  projectId: string,
+  candidates: FoldedPage[],
+  baselineStart: string,
+): Promise<FoldedPage[]> {
+  if (candidates.length === 0) return [];
+  const seen = await DailyPulseRepository.pagesSeenBy(
+    projectId,
+    candidates.flatMap(addressVariants),
+    baselineStart,
+  );
+  return candidates.filter((page) =>
+    addressVariants(page).some((url) => seen.has(url)),
+  );
+}
 
 /** Traffic drop, page disappeared, rising page and host change alerts. */
 export async function pageAlerts(
   projectId: string,
   windows: Windows,
 ): Promise<PulseAlert[]> {
-  const [rows, firstDates] = await Promise.all([
-    DailyPulseRepository.pageTotals(projectId, {
-      baselineStart: windows.baseline.start,
-      baselineEnd: windows.baseline.end,
-      recentStart: windows.recent.start,
-      recentEnd: windows.recent.end,
-    }),
-    DailyPulseRepository.pageFirstDates(projectId, windows.recent.end),
-  ]);
-  const pages = foldPages(rows, firstDates);
+  const rows = await DailyPulseRepository.pageTotals(projectId, {
+    baselineStart: windows.baseline.start,
+    baselineEnd: windows.baseline.end,
+    recentStart: windows.recent.start,
+    recentEnd: windows.recent.end,
+  });
+  const pages = foldPages(rows);
   const disappeared = pages.filter(
     (page) =>
       page.recentImpressions === 0 &&
@@ -175,13 +246,25 @@ export async function pageAlerts(
       page.baselineClicks >= TRAFFIC_DROP_MIN_BASELINE_CLICKS &&
       fellBy(page.recentClicks, page.baselineClicks, TRAFFIC_DROP_PERCENT),
   );
-  // A page first seen after the baseline began is new, not rising: its
-  // baseline is short, and scaling it would inflate the rise.
-  const rising = pages.filter(
-    (page) =>
-      page.firstDate <= windows.baseline.start &&
-      page.recentImpressions >= RISING_MIN_RECENT_IMPRESSIONS &&
-      roseBy(page.recentImpressions, page.baselineImpressions, RISING_PERCENT),
+  const risingCandidates = sortBy(
+    pages.filter(
+      (page) =>
+        page.recentImpressions >= RISING_MIN_RECENT_IMPRESSIONS &&
+        roseBy(
+          page.recentImpressions,
+          page.baselineImpressions,
+          RISING_PERCENT,
+        ),
+    ),
+    [
+      (page) => page.recentImpressions - expectedFrom(page.baselineImpressions),
+      "desc",
+    ],
+  );
+  const rising = await establishedRising(
+    projectId,
+    risingCandidates,
+    windows.baseline.start,
   );
   const alert = (
     type: "traffic_drop" | "page_disappeared" | "rising_page",
@@ -211,12 +294,7 @@ export async function pageAlerts(
     ...sortBy(disappeared, [(page) => page.baselineImpressions, "desc"])
       .slice(0, MAX_ALERTS_PER_RULE)
       .map((page) => alert("page_disappeared", page)),
-    ...sortBy(rising, [
-      (page) =>
-        page.recentImpressions -
-        (page.baselineImpressions * RECENT_DAYS) / BASELINE_DAYS,
-      "desc",
-    ])
+    ...rising
       .slice(0, MAX_ALERTS_PER_RULE)
       .map((page) => alert("rising_page", page)),
     ...(hostChange ? [hostChange] : []),

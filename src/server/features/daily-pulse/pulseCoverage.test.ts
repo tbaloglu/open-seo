@@ -161,16 +161,21 @@ describe("www and bare-host addresses", () => {
         VALUES ('open', 'project', 'N-20261119-1', 'x', '[nabız: page_disappeared] eski', 'proposed', '2026-11-19T00:00:00.000Z'),
                ('dropped', 'project', 'N-20261119-2', 'y', '[nabız: page_disappeared] eski', 'dropped', '2026-11-19T00:00:00.000Z');
       INSERT INTO seo_task_urls (task_id, url, sort_order)
-        VALUES ('open', 'https://hava.example/a', 0), ('dropped', 'https://hava.example/b', 0);
+        VALUES ('open', 'https://hava.example/a', 0), ('open', 'https://hava.example/notlar', 1),
+               ('dropped', 'https://hava.example/b', 0);
     `);
 
     const result = await DailyPulseService.recordAlerts("project", NOW);
 
     expect(result).toMatchObject({ updated: 1, created: 1, skipped: 0 });
     const urls = await testDb.client.execute(
-      "SELECT url FROM seo_task_urls WHERE task_id = 'open'",
+      "SELECT url FROM seo_task_urls WHERE task_id = 'open' ORDER BY sort_order",
     );
-    expect(urls.rows).toEqual([{ url: "https://www.hava.example/a" }]);
+    // The page moved to www; the URL the owner added stays.
+    expect(urls.rows).toEqual([
+      { url: "https://www.hava.example/a" },
+      { url: "https://hava.example/notlar" },
+    ]);
   });
 });
 

@@ -8,8 +8,8 @@ import {
 // alert's shape, title and evidence.
 
 /** Days in the window being judged, and in the baseline before it. */
-export const RECENT_DAYS = 7;
-export const BASELINE_DAYS = 28;
+const RECENT_DAYS = 7;
+const BASELINE_DAYS = 28;
 
 /** Alerts kept per rule, the largest first, so a site-wide dip stays readable. */
 export const MAX_ALERTS_PER_RULE = 10;

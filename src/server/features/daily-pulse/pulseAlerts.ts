@@ -10,6 +10,7 @@ import { DailyPulseRepository } from "./DailyPulseRepository";
 import { pageAlerts } from "./pageRules";
 import {
   buildAlert,
+  expectedFrom,
   fellBy,
   windowsEndingAt,
   type PulseAlert,
@@ -93,6 +94,8 @@ function firstMissingDay(
 function resolveWindows(params: {
   requested: string | undefined;
   latestComplete: string;
+  /** Days before today the source's data is final; for the skip reason. */
+  lagDays: number;
   /** The archive's bookkeeping, per source the rules read. */
   months: ArchivedMonth[][];
   /** The first day the source has any row. */
@@ -102,6 +105,12 @@ function resolveWindows(params: {
   const { label, firstDataDate } = params;
   if (!firstDataDate || params.months.some((rows) => rows.length === 0)) {
     return { evaluated: false, reason: `The archive has no ${label} data.` };
+  }
+  if (params.requested && params.requested > params.latestComplete) {
+    return {
+      evaluated: false,
+      reason: `${label}: the last ${params.lagDays} days are not final yet; the latest day to judge is ${params.latestComplete}.`,
+    };
   }
   const end = params.requested ?? params.latestComplete;
   const windows = windowsEndingAt(end);
@@ -130,14 +139,29 @@ const windowParams = (windows: Windows) => ({
   recentEnd: windows.recent.end,
 });
 
-async function siteClickAlerts(projectId: string, windows: Windows) {
-  const totals = await DailyPulseRepository.siteClickTotals(
-    projectId,
-    windowParams(windows),
-  );
+type Totals = { baseline: number; recent: number };
+
+/** The other site-wide source's change, so a drop in one reads beside the other. */
+function otherSourceNote(label: string, totals: Totals | null): string[] {
+  if (!totals) return [`${label}: bu dönem için değerlendirilemedi.`];
+  const expected = expectedFrom(totals.baseline);
+  return [
+    `Aynı dönemde ${label}: son 7 günde ${totals.recent}, beklenen ${expected}${
+      expected > 0
+        ? ` (${Math.round(((totals.recent - expected) / expected) * 100)}%)`
+        : ""
+    }.`,
+  ];
+}
+
+function siteClickAlerts(
+  windows: Windows,
+  clicks: Totals,
+  sessions: Totals | null,
+): PulseAlert[] {
   if (
-    totals.baseline < SITE_CLICKS_DROP_MIN_BASELINE ||
-    !fellBy(totals.recent, totals.baseline, SITE_CLICKS_DROP_PERCENT)
+    clicks.baseline < SITE_CLICKS_DROP_MIN_BASELINE ||
+    !fellBy(clicks.recent, clicks.baseline, SITE_CLICKS_DROP_PERCENT)
   ) {
     return [];
   }
@@ -148,21 +172,22 @@ async function siteClickAlerts(projectId: string, windows: Windows) {
       source:
         "Search Console, site geneli, bütün cihazlar (OpenSEO arşivi, gsc_daily_site)",
       metric: "clicks",
-      recent: totals.recent,
-      baseline: totals.baseline,
+      recent: clicks.recent,
+      baseline: clicks.baseline,
       windows,
+      notes: otherSourceNote("GA4 organik oturumları", sessions),
     }),
   ];
 }
 
-async function organicAlerts(projectId: string, windows: Windows) {
-  const totals = await DailyPulseRepository.organicSessionTotals(
-    projectId,
-    windowParams(windows),
-  );
+function organicAlerts(
+  windows: Windows,
+  sessions: Totals,
+  clicks: Totals | null,
+): PulseAlert[] {
   if (
-    totals.baseline < ORGANIC_DROP_MIN_BASELINE_SESSIONS ||
-    !fellBy(totals.recent, totals.baseline, ORGANIC_DROP_PERCENT)
+    sessions.baseline < ORGANIC_DROP_MIN_BASELINE_SESSIONS ||
+    !fellBy(sessions.recent, sessions.baseline, ORGANIC_DROP_PERCENT)
   ) {
     return [];
   }
@@ -172,9 +197,10 @@ async function organicAlerts(projectId: string, windows: Windows) {
       url: null,
       source: "Google Analytics, site geneli (OpenSEO arşivi, ga4_daily_site)",
       metric: "organic_sessions",
-      recent: totals.recent,
-      baseline: totals.baseline,
+      recent: sessions.recent,
+      baseline: sessions.baseline,
       windows,
+      notes: otherSourceNote("Search Console tıklamaları", clicks),
     }),
   ];
 }
@@ -205,6 +231,7 @@ export async function compute(
       ga4DateInTimeZone(now, GSC_TIME_ZONE),
       -GSC_COMPLETE_LAG_DAYS,
     ),
+    lagDays: GSC_COMPLETE_LAG_DAYS,
     months: [gscPageMonths, gscSiteMonths],
     firstDataDate: gscData.first,
     label: "Search Console",
@@ -215,14 +242,28 @@ export async function compute(
       ga4DateInTimeZone(now, ga4?.propertyTimeZone ?? PULSE_TIME_ZONE),
       -GA4_COMPLETE_LAG_DAYS,
     ),
+    lagDays: GA4_COMPLETE_LAG_DAYS,
     months: [ga4Months],
     firstDataDate: ga4Data.first,
     label: "Google Analytics",
   });
+  const [clicks, sessions] = await Promise.all([
+    gsc.evaluated
+      ? DailyPulseRepository.siteClickTotals(projectId, windowParams(gsc))
+      : null,
+    ga4Status.evaluated
+      ? DailyPulseRepository.organicSessionTotals(
+          projectId,
+          windowParams(ga4Status),
+        )
+      : null,
+  ]);
   const alerts = [
-    ...(gsc.evaluated ? await siteClickAlerts(projectId, gsc) : []),
+    ...(gsc.evaluated && clicks ? siteClickAlerts(gsc, clicks, sessions) : []),
     ...(gsc.evaluated ? await pageAlerts(projectId, gsc) : []),
-    ...(ga4Status.evaluated ? await organicAlerts(projectId, ga4Status) : []),
+    ...(ga4Status.evaluated && sessions
+      ? organicAlerts(ga4Status, sessions, clicks)
+      : []),
   ];
   return { gsc, ga4: ga4Status, alerts };
 }

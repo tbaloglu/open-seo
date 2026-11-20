@@ -67,9 +67,18 @@ function alertTypeOf(task: SeoTask): PulseAlertType | null {
   );
 }
 
-/** One alert per type and page; www and bare-host addresses are one page. */
+const SITE_WIDE_TYPES: ReadonlySet<PulseAlertType> = new Set([
+  "site_clicks_drop",
+  "organic_sessions_drop",
+  "host_change",
+]);
+
+/**
+ * One alert per type and page (www and bare-host addresses are one page); a
+ * site-wide alert is one per type, whatever URLs its task lists.
+ */
 const alertKey = (type: PulseAlertType, url: string | null) =>
-  `${type} ${url ? canonicalKey(url) : ""}`;
+  SITE_WIDE_TYPES.has(type) ? type : `${type} ${url ? canonicalKey(url) : ""}`;
 
 /**
  * Computes today's alerts and writes them to the project's SEO tasks. An
@@ -122,12 +131,20 @@ async function recordAlerts(projectId: string, now: Date = new Date()) {
     const key = alertKey(alert.type, alert.url);
     const task = open.get(key);
     if (task) {
-      // The page may now be reported under its other address.
-      const moved = alert.url !== null && task.affectedUrls[0] !== alert.url;
+      // The page may now be reported under its other address; URLs the
+      // owner added after it stay.
+      const url = SITE_WIDE_TYPES.has(alert.type) ? null : alert.url;
       writes.push({
         id: task.id,
         evidence: alert.evidence,
-        ...(moved && alert.url ? { affectedUrls: [alert.url] } : {}),
+        ...(url && task.affectedUrls[0] !== url
+          ? {
+              affectedUrls: [
+                url,
+                ...task.affectedUrls.slice(1).filter((other) => other !== url),
+              ],
+            }
+          : {}),
       });
     } else if (quiet.has(key)) {
       skipped++;

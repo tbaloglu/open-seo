@@ -178,8 +178,8 @@ describe("daily pulse rules", () => {
   });
 
   it.each([
-    ["new page reaching 100 impressions", 0, 100, true],
-    ["new page at 99 impressions", 0, 99, false],
+    ["a page quiet in the baseline reaching 100 impressions", 0, 100, true],
+    ["a page quiet in the baseline at 99 impressions", 0, 99, false],
     ["exactly +100% (200 → 100)", 200, 100, true],
     ["just under +100% (204 → 101)", 204, 101, false],
   ])("rising page: %s", async (_name, baseline, recent, fires) => {

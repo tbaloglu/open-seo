@@ -1,4 +1,13 @@
-import { and, eq, gte, lte, max, min, sql, type SQLWrapper } from "drizzle-orm";
+import {
+  and,
+  eq,
+  gte,
+  inArray,
+  lte,
+  max,
+  sql,
+  type SQLWrapper,
+} from "drizzle-orm";
 import { db } from "@/db";
 import { ga4DailySite, gscDailyPage, gscDailySite } from "@/db/schema";
 
@@ -68,22 +77,33 @@ async function pageTotals(projectId: string, windows: Windows) {
     .groupBy(gscDailyPage.page);
 }
 
+// D1 binds at most 100 parameters per statement; two go to project and date.
+const URLS_PER_QUERY = 90;
+
 /**
- * Per page: the first day it ever had a row, through `through`. Read over the
- * whole archive, since a page that was quiet in the baseline may be old.
+ * Which of these page URLs had a row on or before `through`. Looked up per
+ * page through the (project, page, date) index, for a handful of candidates.
  */
-async function pageFirstDates(projectId: string, through: string) {
-  const rows = await db
-    .select({ page: gscDailyPage.page, first: min(gscDailyPage.date) })
-    .from(gscDailyPage)
-    .where(
-      and(
-        eq(gscDailyPage.projectId, projectId),
-        lte(gscDailyPage.date, through),
-      ),
-    )
-    .groupBy(gscDailyPage.page);
-  return new Map(rows.map((row) => [row.page, row.first ?? through]));
+async function pagesSeenBy(
+  projectId: string,
+  urls: string[],
+  through: string,
+): Promise<Set<string>> {
+  const seen = new Set<string>();
+  for (let i = 0; i < urls.length; i += URLS_PER_QUERY) {
+    const rows = await db
+      .selectDistinct({ page: gscDailyPage.page })
+      .from(gscDailyPage)
+      .where(
+        and(
+          eq(gscDailyPage.projectId, projectId),
+          inArray(gscDailyPage.page, urls.slice(i, i + URLS_PER_QUERY)),
+          lte(gscDailyPage.date, through),
+        ),
+      );
+    for (const row of rows) seen.add(row.page);
+  }
+  return seen;
 }
 
 /** Search Console site clicks (all devices) in the baseline and the recent window. */
@@ -141,7 +161,7 @@ async function organicSessionTotals(projectId: string, windows: Windows) {
 
 export const DailyPulseRepository = {
   pageTotals,
-  pageFirstDates,
+  pagesSeenBy,
   siteClickTotals,
   organicSessionTotals,
 };
