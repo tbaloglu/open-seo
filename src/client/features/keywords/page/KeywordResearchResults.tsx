@@ -228,6 +228,7 @@ function TableFilters({ controller }: Props) {
           name="topics"
           label="Topic Words (any)"
           placeholder="pickle, brine, jar"
+          hint="Saved for this project as you type."
         />
       </div>
 

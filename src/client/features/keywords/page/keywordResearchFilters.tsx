@@ -51,11 +51,13 @@ export function FilterTextInput({
   name,
   label,
   placeholder,
+  hint,
 }: {
   form: FiltersForm;
   name: "include" | "exclude" | "topics";
   label: string;
   placeholder: string;
+  hint?: string;
 }) {
   return (
     <DataTableFilterGroup label={label}>
@@ -70,6 +72,7 @@ export function FilterTextInput({
           />
         )}
       </form.Field>
+      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </DataTableFilterGroup>
   );
 }

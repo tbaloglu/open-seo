@@ -6,6 +6,7 @@ import {
   type KeyPageRole,
   type ProjectContextUpdate,
 } from "@/types/schemas/projectContext";
+import { dedupeTopicWords } from "@/shared/topic-words";
 
 /**
  * Canonicalize a key-page URL so the same page is one row: force https, strip
@@ -86,7 +87,8 @@ type ResolvedOp =
     }
   | { kind: "deleteKeyPages"; urls: string[] }
   | { kind: "appendResearchLog"; summary: string }
-  | { kind: "deleteResearchLog"; ids: string[] };
+  | { kind: "deleteResearchLog"; ids: string[] }
+  | { kind: "replaceTopicWords"; words: string[] };
 
 /**
  * Resolves the batch against the state as it evolves, so a single call cannot
@@ -232,6 +234,14 @@ export function resolveContextUpdates(
       resolved.push({
         kind: "deleteResearchLog",
         ids: update.removeResearchLog,
+      });
+      return;
+    }
+
+    if ("topicWords" in update) {
+      resolved.push({
+        kind: "replaceTopicWords",
+        words: dedupeTopicWords(update.topicWords),
       });
       return;
     }

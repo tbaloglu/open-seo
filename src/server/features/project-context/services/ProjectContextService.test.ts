@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   appendResearchLogEntry: vi.fn(),
   pruneResearchLogBefore: vi.fn(),
   listTemplates: vi.fn(),
+  listWords: vi.fn(),
 }));
 
 vi.mock(
@@ -33,6 +34,11 @@ vi.mock(
   () => ({
     ReportTemplateRepository: mocks,
   }),
+);
+
+vi.mock(
+  "@/server/features/topic-words/repositories/TopicWordsRepository",
+  () => ({ TopicWordsRepository: mocks }),
 );
 
 // The real runBatch needs a Workers runtime; executing the built statements
@@ -65,6 +71,7 @@ describe("project context service", () => {
     mocks.listKeyPages.mockResolvedValue([]);
     mocks.listResearchLog.mockResolvedValue([]);
     mocks.listTemplates.mockResolvedValue([]);
+    mocks.listWords.mockResolvedValue([]);
   });
 
   it("splits typed from custom sections and reports the empty typed ones", async () => {
@@ -329,6 +336,7 @@ describe("project context service", () => {
         competitors: [],
         keyPages: [],
         reportTemplates: [],
+        topicWords: [],
         researchLog: Array.from({ length: entryCount }, (_, index) => ({
           id: `log_${index}`,
           entryDate: "2026-08-15",

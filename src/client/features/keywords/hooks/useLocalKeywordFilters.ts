@@ -6,6 +6,11 @@ import {
   type KeywordFilterValues,
 } from "@/client/features/keywords/keywordResearchTypes";
 
+// The research filters, kept per project in this browser. Topic words are the
+// exception: they are saved on the server (useProjectTopicWords), so they
+// start empty here and are never written to storage. A blob saved before that
+// keeps its topics until useProjectTopicWords has uploaded them.
+
 function storageKey(projectId: string) {
   return `keyword-default-filters:${projectId}`;
 }
@@ -48,15 +53,31 @@ function saveFiltersToStorage(projectId: string, filters: KeywordFilterValues) {
   }
 }
 
+/** Topic words this browser saved before they moved to the server. */
+export function readLegacyTopics(projectId: string): string {
+  return loadFiltersFromStorage(projectId).topics;
+}
+
+/** Drops the topic words from this browser's saved filters. */
+export function clearLegacyTopics(projectId: string) {
+  saveFiltersToStorage(projectId, {
+    ...loadFiltersFromStorage(projectId),
+    topics: "",
+  });
+}
+
 export function useLocalKeywordFilters(projectId: string) {
   const filtersForm = useForm({
-    defaultValues: loadFiltersFromStorage(projectId),
+    defaultValues: { ...loadFiltersFromStorage(projectId), topics: "" },
   });
 
   const values = useStore(filtersForm.store, (s) => s.values);
 
   useEffect(() => {
-    saveFiltersToStorage(projectId, values);
+    saveFiltersToStorage(projectId, {
+      ...values,
+      topics: readLegacyTopics(projectId),
+    });
   }, [projectId, values]);
 
   const resetFilters = useCallback(() => {

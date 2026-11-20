@@ -171,4 +171,5 @@ export const {
   ga4DailyPage,
   searchArchivePeriods,
   searchArchiveRuns,
+  projectTopicWords,
 } = schema;
