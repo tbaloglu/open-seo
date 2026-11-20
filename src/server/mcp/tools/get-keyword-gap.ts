@@ -1,0 +1,206 @@
+import { z } from "zod";
+import {
+  KEYWORD_GAP_MAX_COMPETITOR_ROWS,
+  KeywordGapService,
+} from "@/server/features/keyword-gap/services/KeywordGapService";
+import { GSC_DATE_RANGES } from "@/server/features/gsc/searchAnalytics";
+import {
+  GscApiError,
+  GscNotConnectedError,
+  GscTokenError,
+} from "@/server/lib/gscErrors";
+import { buildProjectMeta } from "@/server/mcp/context";
+import { mcpResponse } from "@/server/mcp/formatters";
+import { withMcpProjectAuth } from "@/server/mcp/project-auth";
+import {
+  languageCodeSchema,
+  locationCodeSchema,
+  projectIdSchema,
+} from "@/server/mcp/schemas";
+import {
+  formatMcpTable,
+  positionCell,
+  type McpTableColumn,
+} from "@/server/mcp/table";
+import {
+  describeGscError,
+  missingSelfHostedGoogleClientResponse,
+} from "@/server/mcp/tools/search-console-tools";
+import { buildConnectGscUrl } from "@/server/mcp/urls";
+import { keywordGapSchema, type KeywordGapData } from "@/shared/mcp-contracts";
+
+const inputSchema = {
+  projectId: projectIdSchema,
+  competitorDomain: z
+    .string()
+    .min(1)
+    .max(255)
+    .describe(
+      "Competitor domain without protocol or www, e.g. example.com. Its subdomains are included.",
+    ),
+  locationCode: locationCodeSchema.optional(),
+  languageCode: languageCodeSchema.optional(),
+  maxRank: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe(
+      "Only competitor keywords ranking at this position or better. Defaults to 30.",
+    ),
+  positionThreshold: z
+    .number()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe(
+      "A keyword the site already has impressions for is a gap when its average Search Console position is worse than this. Defaults to 20.",
+    ),
+  dateRange: z
+    .enum(GSC_DATE_RANGES)
+    .optional()
+    .describe("Search Console window. Defaults to last_3_months."),
+  competitorLimit: z
+    .number()
+    .int()
+    .min(1)
+    .max(KEYWORD_GAP_MAX_COMPETITOR_ROWS)
+    .optional()
+    .describe(
+      "Competitor keywords to read from DataForSEO Labs, highest volume first (1-1000). Defaults to 1000; each row adds to the cost.",
+    ),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .optional()
+    .describe("Gap rows to return, highest volume first. Defaults to 100."),
+} as const;
+
+type Args = z.infer<z.ZodObject<typeof inputSchema>>;
+
+type GapRow = KeywordGapData["keywords"][number];
+
+const GAP_COLUMNS: McpTableColumn<GapRow>[] = [
+  { header: "keyword", value: (row) => row.keyword },
+  { header: "volume", value: (row) => row.searchVolume },
+  { header: "their rank", value: (row) => row.competitorRank },
+  {
+    header: "our position",
+    value: (row) => row.ourPosition,
+    format: positionCell,
+  },
+  { header: "our impressions", value: (row) => row.ourImpressions },
+  { header: "our clicks", value: (row) => row.ourClicks },
+  { header: "intent", value: (row) => row.intent },
+  { header: "their url", value: (row) => row.competitorUrl },
+];
+
+export const getKeywordGapTool = {
+  name: "get_keyword_gap",
+  config: {
+    title: "Get keyword gap",
+    description:
+      "Find keywords a competitor ranks for where the project's site is missing or weak: the competitor's organic keywords from DataForSEO Labs (rank maxRank or better, default 30), compared with the project's Search Console queries (default last 3 months). A keyword is a gap when the site has no Search Console impressions for it or its average position is worse than positionThreshold (default 20). Matching is exact phrase after case folding (Turkish i/İ/ı/I are one letter) and whitespace normalization; no fuzzy matching. Each row has volume, the competitor's rank and URL, intent, and the site's impressions, clicks, and position (null if none), sorted by volume. Labs covers non-English long-tail queries thinly and Search Console hides rare queries, so treat the result as a topic map, not a complete list. Requires a connected Search Console property, which is read first so an unconnected project spends nothing. Costs ~15-170 credits (one Labs call billed per returned row, up to 1,000), well under the 2,000-credit confirmation threshold; cached for 12 hours. For the competitor's full keyword list, use get_ranked_keywords.",
+    inputSchema,
+    outputSchema: keywordGapSchema.partial().extend({
+      ok: z.boolean(),
+      reason: z.string().optional(),
+      connectionRequired: z.boolean().optional(),
+      connectUrl: z.string().optional(),
+      setupDocsUrl: z.string().optional(),
+      connected: z.boolean().optional(),
+    }),
+    annotations: {
+      readOnlyHint: false,
+      openWorldHint: true,
+      destructiveHint: false,
+    },
+  },
+  handler: withMcpProjectAuth(async (args: Args, context) => {
+    const blocked = await missingSelfHostedGoogleClientResponse(
+      context,
+      args.projectId,
+    );
+    if (blocked) return blocked;
+
+    const meta = buildProjectMeta(
+      context,
+      args.projectId,
+      `/p/${args.projectId}/domain`,
+      { domain: args.competitorDomain },
+    );
+    const connectUrl = buildConnectGscUrl(
+      context.baseUrl,
+      args.projectId,
+      Boolean(context.auth.guestClaimToken),
+    );
+
+    let result: KeywordGapData;
+    try {
+      result = await KeywordGapService.getKeywordGap(
+        {
+          projectId: args.projectId,
+          project: context.project,
+          competitorDomain: args.competitorDomain,
+          locationCode: args.locationCode,
+          languageCode: args.languageCode,
+          maxRank: args.maxRank ?? 30,
+          positionThreshold: args.positionThreshold ?? 20,
+          dateRange: args.dateRange ?? "last_3_months",
+          competitorLimit:
+            args.competitorLimit ?? KEYWORD_GAP_MAX_COMPETITOR_ROWS,
+          limit: args.limit ?? 100,
+        },
+        context.billing,
+      );
+    } catch (error) {
+      const isGscError =
+        error instanceof GscNotConnectedError ||
+        error instanceof GscTokenError ||
+        error instanceof GscApiError;
+      if (!isGscError) throw error;
+      const isNotConnected = error instanceof GscNotConnectedError;
+      return mcpResponse({
+        text: `${describeGscError(error)} The keyword gap compares against Search Console, so nothing was charged.${isNotConnected ? ` Connect it here: ${connectUrl}` : ""}`,
+        meta,
+        structuredContent: {
+          ok: false,
+          reason: isNotConnected ? "not_connected" : "api_error",
+          connectionRequired: isNotConnected || error instanceof GscTokenError,
+          connectUrl,
+        },
+      });
+    }
+
+    const { counts } = result;
+    const inLabs =
+      counts.competitorTotalInLabs != null &&
+      counts.competitorTotalInLabs > counts.competitorTotal
+        ? ` (of ${counts.competitorTotalInLabs} in Labs)`
+        : "";
+    const shown =
+      counts.returned < counts.gap
+        ? `, showing top ${counts.returned} by volume`
+        : "";
+    const truncated = result.searchConsoleTruncated
+      ? ` Search Console has more than ${result.searchConsoleQueries} distinct queries; only those were compared, so some "no impressions" rows may be wrong.`
+      : "";
+    const header =
+      `${result.competitor} vs ${result.siteUrl} · Search Console ${result.startDate}→${result.endDate} · ` +
+      `competitor keywords at rank ≤${result.maxRank}: ${counts.competitorTotal}${inLabs} · ` +
+      `we also have impressions for ${counts.matched} · ` +
+      `gap (no impressions or position worse than ${result.positionThreshold}): ${counts.gap}${shown}.${truncated}`;
+    const text =
+      result.keywords.length > 0
+        ? `${header}\n${formatMcpTable(result.keywords, GAP_COLUMNS)}`
+        : `${header}\nNo gap keywords.`;
+    return mcpResponse({
+      text,
+      meta,
+      structuredContent: { ok: true, ...result },
+    });
+  }),
+};

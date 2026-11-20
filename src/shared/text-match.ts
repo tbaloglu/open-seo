@@ -13,3 +13,18 @@ export function foldedTermSource(term: string) {
     .replace(/\s+/g, "\\s+")
     .replace(/[iIı]̇?/g, "[iIı]\\u0307?");
 }
+
+/**
+ * A search term folded to a key for exact-phrase comparison: the same
+ * i-letter folding as foldedTermSource (i, I, ı and İ are one letter), lower
+ * case, and runs of whitespace collapsed. Other diacritics stay, so "şeker"
+ * and "seker" are different keys.
+ */
+export function foldedTermKey(term: string) {
+  return term
+    .normalize("NFD")
+    .replace(/[iIı]̇?/g, "i")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
