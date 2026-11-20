@@ -23,6 +23,24 @@ const QUEUED_BASE_PAGE_COST_USD = 0.0006;
 const QUEUED_EXTRA_PAGE_COST_USD = 0.00045;
 
 /**
+ * Rank checks this deep ask the queue for AI Overviews Google loads after the
+ * page (load_async_ai_overview); without it the standard queue returns only
+ * cached ones, often with no sources. Shallower checks skip it: the extra
+ * would add 29-50% to their cost.
+ */
+const ASYNC_AI_OVERVIEW_MIN_DEPTH = 40;
+
+/**
+ * DataForSEO's extra per task for load_async_ai_overview, refunded when the
+ * page had no asynchronous AI Overview; estimates assume it is kept.
+ */
+const ASYNC_AI_OVERVIEW_COST_USD = 0.0006;
+
+export function loadsAsyncAiOverview(depth: number): boolean {
+  return depth >= ASYNC_AI_OVERVIEW_MIN_DEPTH;
+}
+
+/**
  * Reads a keyword/device can get in one check: the first, and a second when
  * the first got no page back or missed a keyword that ranked before.
  */
@@ -132,10 +150,15 @@ export function costPerSerpAtDepth(depth: number): number {
 
 /**
  * DataForSEO cost for one rank check read: a standard-queue SERP plus the
- * first-page price resolve_poisoned_results adds to every task.
+ * first-page price resolve_poisoned_results adds to every task, and at
+ * ASYNC_AI_OVERVIEW_MIN_DEPTH or deeper the load_async_ai_overview extra.
  */
 export function costPerRankCheckRead(depth: number): number {
-  return costPerSerpAtDepth(depth) + QUEUED_BASE_PAGE_COST_USD;
+  return (
+    costPerSerpAtDepth(depth) +
+    QUEUED_BASE_PAGE_COST_USD +
+    (loadsAsyncAiOverview(depth) ? ASYNC_AI_OVERVIEW_COST_USD : 0)
+  );
 }
 
 export function pagesToDepth(pages: number): number {

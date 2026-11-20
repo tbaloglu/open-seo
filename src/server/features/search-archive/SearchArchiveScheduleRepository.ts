@@ -15,7 +15,8 @@ import {
  * with Search Console or Analytics connected, whose latest run completed
  * before `completedBefore`, failed before `failedBefore`, is still marked
  * running since before `runningBefore`, or does not exist. Never-run projects
- * first, then the longest waiting.
+ * first, then the longest waiting. Each comes with its latest run's mode and
+ * status (null when it never ran).
  */
 async function listScheduleCandidates(params: {
   completedBefore: string;
@@ -25,7 +26,11 @@ async function listScheduleCandidates(params: {
 }) {
   const finished = sql`coalesce(${searchArchiveRuns.finishedAt}, ${searchArchiveRuns.startedAt})`;
   const rows = await db
-    .select({ projectId: projects.id })
+    .select({
+      projectId: projects.id,
+      lastMode: searchArchiveRuns.mode,
+      lastStatus: searchArchiveRuns.status,
+    })
     .from(projects)
     .leftJoin(searchArchiveRuns, eq(searchArchiveRuns.projectId, projects.id))
     .where(
@@ -64,7 +69,7 @@ async function listScheduleCandidates(params: {
     )
     .orderBy(sql`coalesce(${finished}, '')`, asc(projects.id))
     .limit(params.limit);
-  return rows.map((row) => row.projectId);
+  return rows;
 }
 
 export const SearchArchiveScheduleRepository = { listScheduleCandidates };

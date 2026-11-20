@@ -3,8 +3,9 @@ import { STUCK_RUN_AFTER_MS } from "@/server/lib/startWorkflow";
 import { SearchArchiveScheduleRepository } from "./SearchArchiveScheduleRepository";
 import { SearchArchiveService } from "./SearchArchiveService";
 
-// The daily archive: once a day, an incremental archive run for every project
-// with Search Console or Analytics connected. It runs from the every-5-minutes
+// The daily archive: once a day, an archive run for every project with Search
+// Console or Analytics connected: a backfill (16 months) the first time, an
+// incremental run (the latest three months) after that. It runs from the every-5-minutes
 // cron tick (server.ts `scheduled`, the same handler on Cloudflare and in the
 // standalone celld image) and starts a few projects per tick, so 14 sites are
 // all started within half an hour without crowding Google's quotas. Each run
@@ -52,10 +53,18 @@ export async function runScheduledSearchArchive() {
   let started = 0;
   let alreadyRunning = 0;
   let errors = 0;
-  for (const projectId of candidates) {
+  for (const { projectId, lastMode, lastStatus } of candidates) {
     if (started >= MAX_STARTS_PER_TICK) break;
+    // A project's first run copies everything Google still has; a failed
+    // backfill is resumed as one (it skips the months already complete).
+    // After that, the latest three months a day are enough.
+    const mode =
+      lastMode === null ||
+      (lastMode === "backfill" && lastStatus !== "completed")
+        ? "backfill"
+        : "incremental";
     try {
-      const result = await SearchArchiveService.start(projectId, "incremental");
+      const result = await SearchArchiveService.start(projectId, mode);
       if (result.started) started++;
       else alreadyRunning++;
     } catch (error) {

@@ -96,13 +96,15 @@ beforeEach(async () => {
     status: string,
     started: number,
     finished: number | null,
+    mode = "incremental",
   ) =>
     testDb.client.execute({
       sql: `INSERT INTO search_archive_runs (project_id, run_id, mode, status, started_at, finished_at)
-        VALUES (?, ?, 'incremental', ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?)`,
       args: [
         projectId,
         `run-${projectId}`,
+        mode,
         status,
         hoursAgo(started),
         finished === null ? null : hoursAgo(finished),
@@ -111,7 +113,8 @@ beforeEach(async () => {
   await run("stale", "completed", 21.5, 21);
   await run("fresh", "completed", 2.5, 2);
   await run("failed-recently", "failed", 1.5, 1);
-  await run("failed-long-ago", "failed", 7.5, 7);
+  // A first backfill that failed is resumed as a backfill.
+  await run("failed-long-ago", "failed", 7.5, 7, "backfill");
   await run("running", "running", 0.5, null);
 });
 
@@ -126,17 +129,17 @@ describe("daily search archive scheduler", () => {
     expect(createWorkflow).not.toHaveBeenCalled();
   });
 
-  it("starts due projects three per tick, never-archived first, until all are done", async () => {
+  it("starts due projects three per tick, never-archived first as backfills, until all are done", async () => {
     await runScheduledSearchArchive();
     expect(startedProjects()).toEqual([
-      "ga4-only:incremental",
-      "never:incremental",
+      "ga4-only:backfill",
+      "never:backfill",
       "stale:incremental",
     ]);
 
     vi.setSystemTime(new Date(SIX_AM.getTime() + 5 * 60_000));
     await runScheduledSearchArchive();
-    expect(startedProjects().slice(3)).toEqual(["failed-long-ago:incremental"]);
+    expect(startedProjects().slice(3)).toEqual(["failed-long-ago:backfill"]);
 
     // Everything due has a fresh run now.
     await runScheduledSearchArchive();
