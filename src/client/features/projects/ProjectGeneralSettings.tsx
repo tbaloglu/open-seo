@@ -21,8 +21,10 @@ import {
 } from "@/client/lib/active-project";
 import { toastInitialAudit } from "@/client/features/projects/initialAuditToast";
 import { archiveProject, updateProject } from "@/serverFunctions/projects";
-import { setTopicWords } from "@/serverFunctions/topic-words";
-import { topicWordsQueryOptions } from "@/client/features/keywords/hooks/useProjectTopicWords";
+import {
+  topicWordsQueryOptions,
+  useSaveTopicWords,
+} from "@/client/features/keywords/hooks/useProjectTopicWords";
 import {
   splitTopicWords,
   TOPIC_WORDS_RULE,
@@ -246,25 +248,15 @@ function TopicWordsForm({
   projectId: string;
   words: string[];
 }) {
-  const queryClient = useQueryClient();
-  const mutation = useMutation({
-    mutationFn: (topics: string) =>
-      setTopicWords({ data: { projectId, words: splitTopicWords(topics) } }),
-    onSuccess: (saved) => {
-      queryClient.setQueryData(
-        topicWordsQueryOptions(projectId).queryKey,
-        saved,
-      );
-      toast.success("Topic words saved");
-    },
-  });
+  const mutation = useSaveTopicWords(projectId);
 
   const form = useAppForm({
     defaultValues: { topics: words.join(", ") },
     validationLogic: revalidateLogic(),
     validators: { onDynamic: topicWordsFormSchema },
     onSubmit: async ({ value, formApi }) => {
-      const saved = await mutation.mutateAsync(value.topics);
+      const saved = await mutation.mutateAsync(splitTopicWords(value.topics));
+      toast.success("Topic words saved");
       if (formApi.state.values === value) {
         formApi.reset({ topics: saved.join(", ") });
       }

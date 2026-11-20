@@ -54,10 +54,12 @@ export function FilterTextInput({
   name,
   label,
   placeholder,
+  disabled,
   children,
 }: {
   form: FiltersForm;
   name: "include" | "exclude" | "topics";
+  disabled?: boolean;
   label: string;
   placeholder: string;
   children?: ReactNode;
@@ -69,6 +71,7 @@ export function FilterTextInput({
           <Input
             aria-label={label}
             className="h-7"
+            disabled={disabled}
             placeholder={placeholder}
             value={field.state.value}
             onChange={(event) => field.handleChange(event.target.value)}
@@ -94,6 +97,10 @@ export function TopicWordsDefaultControls({
     <div className="space-y-1.5">
       {!topicWords.valid ? (
         <p className="text-xs text-destructive">{TOPIC_WORDS_RULE}</p>
+      ) : topicWords.changedElsewhere ? (
+        <p className="text-xs text-muted-foreground">
+          Project default changed elsewhere — saving will replace it.
+        </p>
       ) : topicWords.differs ? (
         <p className="text-xs text-muted-foreground">
           Not saved — differs from project default.

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "@tanstack/react-form";
 import {
   queryOptions,
@@ -7,15 +7,11 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
+import type { useLocalKeywordFilters } from "@/client/features/keywords/hooks/useLocalKeywordFilters";
 import {
-  clearLegacyTopics,
-  readLegacyTopics,
-  type useLocalKeywordFilters,
-} from "@/client/features/keywords/hooks/useLocalKeywordFilters";
-import {
-  planLegacyTopicUpload,
   syncTopicField,
   topicDraftState,
+  type TopicBaseline,
 } from "@/client/features/keywords/topicWordsDraft";
 import { getTopicWords, setTopicWords } from "@/serverFunctions/topic-words";
 
@@ -28,72 +24,59 @@ export const topicWordsQueryOptions = (projectId: string) =>
     staleTime: 0,
   });
 
+/**
+ * Saves a project's topic words. A refetch already in flight could land after
+ * the save with the old list, so it is cancelled first.
+ */
+export function useSaveTopicWords(projectId: string) {
+  const queryClient = useQueryClient();
+  const { queryKey } = topicWordsQueryOptions(projectId);
+  return useMutation({
+    mutationFn: (words: string[]) =>
+      setTopicWords({ data: { projectId, words } }),
+    onMutate: () => queryClient.cancelQueries({ queryKey }),
+    onSuccess: (words) => queryClient.setQueryData(queryKey, words),
+  });
+}
+
 type FiltersForm = ReturnType<typeof useLocalKeywordFilters>["filtersForm"];
-
-function migrationKey(projectId: string) {
-  return `keyword-topic-words-migrated:${projectId}`;
-}
-
-/** Marks the one-time upload as tried; false when it was tried before. */
-function claimLegacyMigration(projectId: string) {
-  try {
-    if (localStorage.getItem(migrationKey(projectId))) return false;
-    localStorage.setItem(migrationKey(projectId), "1");
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * The research page's "Topic Words (any)" field starts from the project's
  * saved list and then filters only the current view. The list changes only
- * when the user presses save. Topic words this browser kept before they moved
- * to the server are uploaded once, when the project has none yet.
+ * when the user presses save.
+ *
+ * The keywords route remounts per project (remountDeps), so the baseline here
+ * never carries over from another project.
  */
 export function useProjectTopicWords(projectId: string, form: FiltersForm) {
-  const queryClient = useQueryClient();
   const query = useQuery(topicWordsQueryOptions(projectId));
   const saved = query.data;
   const topics = useStore(form.store, (state) => state.values.topics);
-  // The text the field last took from the server, per project.
-  const synced = useRef<{ projectId: string; text: string } | null>(null);
+  // State for rendering, mirrored in a ref so the sync below runs only when
+  // the server list changes.
+  const [baseline, setBaselineState] = useState<TopicBaseline | null>(null);
+  const baselineRef = useRef<TopicBaseline | null>(null);
+  const setBaseline = useCallback((next: TopicBaseline | null) => {
+    baselineRef.current = next;
+    setBaselineState(next);
+  }, []);
 
-  const mutation = useMutation({
-    mutationFn: (words: string[]) =>
-      setTopicWords({ data: { projectId, words } }),
-    onSuccess: (words) =>
-      queryClient.setQueryData(
-        topicWordsQueryOptions(projectId).queryKey,
-        words,
-      ),
-  });
+  const mutation = useSaveTopicWords(projectId);
   const { mutate } = mutation;
 
   useEffect(() => {
     if (!saved) return;
-    const firstSync = synced.current?.projectId !== projectId;
     const next = syncTopicField({
       current: form.state.values.topics,
-      synced: firstSync ? null : (synced.current?.text ?? null),
+      baseline: baselineRef.current,
       saved,
     });
     if (next.fieldText !== null) form.setFieldValue("topics", next.fieldText);
-    synced.current =
-      next.synced === null ? null : { projectId, text: next.synced };
-    if (!firstSync) return;
+    if (next.baseline !== baselineRef.current) setBaseline(next.baseline);
+  }, [form, saved, setBaseline]);
 
-    const legacy = planLegacyTopicUpload(readLegacyTopics(projectId), saved);
-    if (legacy.kind === "clear") clearLegacyTopics(projectId);
-    if (legacy.kind === "upload" && claimLegacyMigration(projectId)) {
-      const text = legacy.words.join(", ");
-      form.setFieldValue("topics", text);
-      synced.current = { projectId, text };
-      mutate(legacy.words, { onSuccess: () => clearLegacyTopics(projectId) });
-    }
-  }, [form, mutate, projectId, saved]);
-
-  const draft = topicDraftState(topics, saved ?? []);
+  const draft = topicDraftState(topics, saved ?? [], baseline);
 
   const save = useCallback(() => {
     if (!draft.canSave || mutation.isPending) return;
@@ -106,14 +89,16 @@ export function useProjectTopicWords(projectId: string, form: FiltersForm) {
     if (!saved) return;
     const text = saved.join(", ");
     form.setFieldValue("topics", text);
-    synced.current = { projectId, text };
-  }, [form, projectId, saved]);
+    setBaseline({ text, words: saved });
+  }, [form, saved, setBaseline]);
 
+  const loaded = saved !== undefined;
   return {
-    loaded: saved !== undefined,
+    loaded,
     valid: draft.valid,
-    differs: saved !== undefined && draft.differs,
-    canSave: saved !== undefined && draft.canSave && !mutation.isPending,
+    differs: loaded && draft.differs,
+    changedElsewhere: loaded && draft.changedElsewhere,
+    canSave: loaded && draft.canSave && !mutation.isPending,
     isSaving: mutation.isPending,
     save,
     resetToSaved,

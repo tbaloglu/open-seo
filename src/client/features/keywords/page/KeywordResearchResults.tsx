@@ -229,6 +229,8 @@ function TableFilters({ controller }: Props) {
           name="topics"
           label="Topic Words (any)"
           placeholder="pickle, brine, jar"
+          // Typing before the project list loads would be overwritten by it.
+          disabled={!controller.topicWords.loaded}
         >
           <TopicWordsDefaultControls topicWords={controller.topicWords} />
         </FilterTextInput>
