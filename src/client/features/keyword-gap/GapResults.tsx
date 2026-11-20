@@ -104,38 +104,38 @@ export function GapResults({
         ) : null}
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <DataTable
-          table={table}
-          empty={
-            counts.competitorTotal === 0
-              ? {
-                  title: "No competitor keywords found",
-                  description: `DataForSEO Labs has no top-${result.maxRank} organic keywords for ${result.competitor} in this country.`,
-                }
-              : {
-                  title: "No gap keywords",
-                  description: `Your site already ranks in the top ${result.positionThreshold} for every compared keyword.`,
-                }
-          }
-        />
-        {result.keywords.length > 0 ? (
-          <TablePagination
-            page={pagination.pageIndex + 1}
-            pageSize={pagination.pageSize}
-            pageSizes={PAGE_SIZES}
-            totalCount={result.keywords.length}
-            hasNextPage={table.getCanNextPage()}
-            isLoading={false}
-            onPageChange={(page) =>
-              setPagination((prev) => ({ ...prev, pageIndex: page - 1 }))
-            }
-            onPageSizeChange={(pageSize) =>
-              setPagination({ pageIndex: 0, pageSize })
-            }
-          />
-        ) : null}
-      </div>
+      <DataTable
+        table={table}
+        empty={
+          counts.competitorTotal === 0
+            ? {
+                title: "No competitor keywords found",
+                description: `DataForSEO Labs has no top-${result.maxRank} organic keywords for ${result.competitor} in this country.`,
+              }
+            : {
+                title: "No gap keywords",
+                description: `Your site already ranks in the top ${result.positionThreshold} for every compared keyword.`,
+              }
+        }
+        footer={
+          result.keywords.length > 0 ? (
+            <TablePagination
+              page={pagination.pageIndex + 1}
+              pageSize={pagination.pageSize}
+              pageSizes={PAGE_SIZES}
+              totalCount={result.keywords.length}
+              hasNextPage={table.getCanNextPage()}
+              isLoading={false}
+              onPageChange={(page) =>
+                setPagination((prev) => ({ ...prev, pageIndex: page - 1 }))
+              }
+              onPageSizeChange={(pageSize) =>
+                setPagination({ pageIndex: 0, pageSize })
+              }
+            />
+          ) : null
+        }
+      />
 
       <TableBulkActionBar
         selectedCount={selectedRows.length}
@@ -163,7 +163,7 @@ export function GapResults({
   );
 }
 
-/** Saves gap keywords, with their volume, in the market they were read for. */
+/** Saves gap keywords in the market they were read for. */
 function useSaveGapKeywords(
   projectId: string,
   result: GapResult,

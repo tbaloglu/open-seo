@@ -50,6 +50,7 @@ export function KeywordGapPage({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: false,
+    refetchOnMount: false,
   });
   const result = gapQuery.data;
 
@@ -94,7 +95,13 @@ export function KeywordGapPage({
         ) : (
           <GapResults
             // A new comparison starts on page one with nothing selected.
-            key={`${result.competitor}-${result.locationCode}`}
+            key={[
+              projectId,
+              result.competitor,
+              result.locationCode,
+              result.languageCode,
+              result.siteUrl,
+            ].join("|")}
             projectId={projectId}
             result={result}
           />
@@ -144,6 +151,8 @@ function GapSearchCard({
   // changes only the location, so a typed competitor survives it.
   useEffect(() => {
     form.setFieldValue("competitor", competitor);
+    // A submit error belongs to the value it was raised for.
+    form.setFieldMeta("competitor", (meta) => ({ ...meta, errorMap: {} }));
   }, [form, competitor]);
   useEffect(() => {
     form.setFieldValue("locationCode", locationCode);
