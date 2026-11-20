@@ -79,6 +79,7 @@ function foldPages(rows: PageRow[]): FoldedPage[] {
       [(row) => row.recentImpressions, "desc"],
       [(row) => row.lastDate ?? "", "desc"],
       [(row) => row.baselineImpressions, "desc"],
+      [(row) => row.page, "asc"],
     );
     const sum = (field: keyof Omit<PageRow, "page" | "lastDate">) =>
       variants.reduce((total, row) => total + row[field], 0);
@@ -124,6 +125,14 @@ const hostCount = (page: FoldedPage) =>
  * One alert per project when pages moved between the www and the bare host:
  * Google indexes the site under the other address, which canonical tags or
  * redirects usually explain.
+ *
+ * It compares where a page's impressions were across the whole 28-day
+ * baseline with where they are in the last 7 days. A switch that began about
+ * 6 or more days before the recent window already holds over 20% of the
+ * baseline on the new host, so the old host no longer dominates it and the
+ * move is not reported. Accepted: the move is reported on the days right
+ * after it starts, if the pulse runs then, and the folded page rules judge
+ * the page correctly either way.
  */
 function hostChangeAlert(
   pages: FoldedPage[],
@@ -199,26 +208,41 @@ function addressVariants(page: FoldedPage): string[] {
   return [...urls];
 }
 
+/** Rising candidates checked per lookup. */
+const RISING_CHECK_BATCH = 20;
+
 /**
- * Rising pages that already existed when the baseline began, under any of
- * their addresses. A page first seen later is new, not rising: its baseline is
- * short, and scaling it would inflate the rise. Only the candidates are
- * looked up, and a page with no row by then counts as new.
+ * Up to `limit` rising pages that already existed when the baseline began,
+ * under any of their addresses, in the candidates' order. A page first seen
+ * later is new, not rising: its baseline is short, and scaling it would
+ * inflate the rise. Candidates are looked up a batch at a time until enough
+ * are found, and a page with no row by then counts as new.
  */
 async function establishedRising(
   projectId: string,
   candidates: FoldedPage[],
   baselineStart: string,
+  limit: number,
 ): Promise<FoldedPage[]> {
-  if (candidates.length === 0) return [];
-  const seen = await DailyPulseRepository.pagesSeenBy(
-    projectId,
-    candidates.flatMap(addressVariants),
-    baselineStart,
-  );
-  return candidates.filter((page) =>
-    addressVariants(page).some((url) => seen.has(url)),
-  );
+  const established: FoldedPage[] = [];
+  for (
+    let i = 0;
+    i < candidates.length && established.length < limit;
+    i += RISING_CHECK_BATCH
+  ) {
+    const batch = candidates.slice(i, i + RISING_CHECK_BATCH);
+    const seen = await DailyPulseRepository.pagesSeenBy(
+      projectId,
+      batch.flatMap(addressVariants),
+      baselineStart,
+    );
+    established.push(
+      ...batch.filter((page) =>
+        addressVariants(page).some((url) => seen.has(url)),
+      ),
+    );
+  }
+  return established.slice(0, limit);
 }
 
 /** Traffic drop, page disappeared, rising page and host change alerts. */
@@ -265,6 +289,7 @@ export async function pageAlerts(
     projectId,
     risingCandidates,
     windows.baseline.start,
+    MAX_ALERTS_PER_RULE,
   );
   const alert = (
     type: "traffic_drop" | "page_disappeared" | "rising_page",
@@ -294,9 +319,7 @@ export async function pageAlerts(
     ...sortBy(disappeared, [(page) => page.baselineImpressions, "desc"])
       .slice(0, MAX_ALERTS_PER_RULE)
       .map((page) => alert("page_disappeared", page)),
-    ...rising
-      .slice(0, MAX_ALERTS_PER_RULE)
-      .map((page) => alert("rising_page", page)),
+    ...rising.map((page) => alert("rising_page", page)),
     ...(hostChange ? [hostChange] : []),
   ];
 }

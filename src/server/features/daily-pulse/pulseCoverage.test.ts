@@ -213,3 +213,58 @@ describe("site clicks drop", () => {
     expect(await types()).toEqual(fires ? ["site_clicks_drop"] : []);
   });
 });
+
+describe("site clicks drop beside Analytics", () => {
+  async function bothDropped(ga4BaselineDay: string) {
+    await siteDay(BASELINE_START, 200);
+    await siteDay(RECENT_START, 10);
+    await testDb.client.execute({
+      sql: `INSERT INTO ga4_daily_site (project_id, date, sessions, organic_sessions, key_events, organic_key_events)
+        VALUES ('project', ?, 200, 200, 0, 0), ('project', '2026-11-17', 20, 20, 0, 0)`,
+      args: [ga4BaselineDay],
+    });
+  }
+
+  it("names the other source's own dates when its window differs", async () => {
+    // Analytics lags 2 days in Istanbul: its window ends Nov 18, a day later.
+    await bothDropped("2026-10-15");
+
+    const { alerts } = await pulse();
+
+    const site = alerts.find((alert) => alert.type === "site_clicks_drop");
+    expect(site?.evidence).toContain(
+      "GA4 organik oturumları (2026-11-12 – 2026-11-18, öncesi 2026-10-15 – 2026-11-11): son 7 günde 20, beklenen 50 (−60%).",
+    );
+  });
+
+  it("says the same period when both windows match", async () => {
+    await bothDropped(BASELINE_START);
+
+    const { alerts } = await DailyPulseService.compute("project", {
+      now: NOW,
+      date: "2026-11-17",
+    });
+
+    const organic = alerts.find(
+      (alert) => alert.type === "organic_sessions_drop",
+    );
+    expect(organic?.evidence).toContain(
+      "Aynı dönemde Search Console tıklamaları: son 7 günde 10, beklenen 50 (−80%).",
+    );
+  });
+});
+
+describe("archive gaps", () => {
+  it("names the window's first day when its month was read only before it", async () => {
+    await siteDay("2026-09-01", 0);
+    await testDb.client.execute(
+      "UPDATE search_archive_periods SET fetched_through = '2026-10-10' WHERE source = 'gsc_page' AND month = '2026-10'",
+    );
+
+    const result = await pulse();
+
+    expect(!result.gsc.evaluated && result.gsc.reason).toContain(
+      "missing 2026-10-14",
+    );
+  });
+});

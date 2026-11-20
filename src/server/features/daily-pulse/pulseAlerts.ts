@@ -10,6 +10,7 @@ import { DailyPulseRepository } from "./DailyPulseRepository";
 import { pageAlerts } from "./pageRules";
 import {
   buildAlert,
+  changePercent,
   expectedFrom,
   fellBy,
   windowsEndingAt,
@@ -77,7 +78,9 @@ function firstMissingDay(
     const needed = monthEnd(month) < end ? monthEnd(month) : end;
     const through = byMonth.get(month);
     if (!through) return day;
-    if (through < needed) return addDays(through, 1);
+    // A month read only partly, or not as far as `day`: never report a day
+    // before the window, whose own month row may end earlier.
+    if (through < needed) return through < day ? day : addDays(through, 1);
     day = addDays(needed, 1);
   }
   return null;
@@ -140,16 +143,36 @@ const windowParams = (windows: Windows) => ({
 });
 
 type Totals = { baseline: number; recent: number };
+type Measured = Totals & { windows: Windows };
 
-/** The other site-wide source's change, so a drop in one reads beside the other. */
-function otherSourceNote(label: string, totals: Totals | null): string[] {
-  if (!totals) return [`${label}: bu dönem için değerlendirilemedi.`];
-  const expected = expectedFrom(totals.baseline);
+/** "+12%", "−34%", "0%". */
+function signedPercent(percent: number): string {
+  if (percent > 0) return `+${percent}%`;
+  if (percent < 0) return `−${-percent}%`;
+  return "0%";
+}
+
+/**
+ * The other site-wide source's change, so a drop in one reads beside the
+ * other. Search Console and Analytics lag differently (and Search Console
+ * counts days in Pacific Time), so their windows often differ by a day: the
+ * note says "the same period" only when they match, else names the other's.
+ */
+function otherSourceNote(
+  label: string,
+  other: Measured | null,
+  own: Windows,
+): string[] {
+  if (!other) return [`${label}: bu dönem için değerlendirilemedi.`];
+  const { recent, baseline } = other.windows;
+  const period =
+    recent.start === own.recent.start && recent.end === own.recent.end
+      ? `Aynı dönemde ${label}`
+      : `${label} (${recent.start} – ${recent.end}, öncesi ${baseline.start} – ${baseline.end})`;
+  const change = changePercent(other.recent, other.baseline);
   return [
-    `Aynı dönemde ${label}: son 7 günde ${totals.recent}, beklenen ${expected}${
-      expected > 0
-        ? ` (${Math.round(((totals.recent - expected) / expected) * 100)}%)`
-        : ""
+    `${period}: son 7 günde ${other.recent}, beklenen ${expectedFrom(other.baseline)}${
+      change === null ? "" : ` (${signedPercent(change)})`
     }.`,
   ];
 }
@@ -157,7 +180,7 @@ function otherSourceNote(label: string, totals: Totals | null): string[] {
 function siteClickAlerts(
   windows: Windows,
   clicks: Totals,
-  sessions: Totals | null,
+  sessions: Measured | null,
 ): PulseAlert[] {
   if (
     clicks.baseline < SITE_CLICKS_DROP_MIN_BASELINE ||
@@ -175,7 +198,7 @@ function siteClickAlerts(
       recent: clicks.recent,
       baseline: clicks.baseline,
       windows,
-      notes: otherSourceNote("GA4 organik oturumları", sessions),
+      notes: otherSourceNote("GA4 organik oturumları", sessions, windows),
     }),
   ];
 }
@@ -183,7 +206,7 @@ function siteClickAlerts(
 function organicAlerts(
   windows: Windows,
   sessions: Totals,
-  clicks: Totals | null,
+  clicks: Measured | null,
 ): PulseAlert[] {
   if (
     sessions.baseline < ORGANIC_DROP_MIN_BASELINE_SESSIONS ||
@@ -200,7 +223,7 @@ function organicAlerts(
       recent: sessions.recent,
       baseline: sessions.baseline,
       windows,
-      notes: otherSourceNote("Search Console tıklamaları", clicks),
+      notes: otherSourceNote("Search Console tıklamaları", clicks, windows),
     }),
   ];
 }
@@ -249,13 +272,15 @@ export async function compute(
   });
   const [clicks, sessions] = await Promise.all([
     gsc.evaluated
-      ? DailyPulseRepository.siteClickTotals(projectId, windowParams(gsc))
+      ? DailyPulseRepository.siteClickTotals(projectId, windowParams(gsc)).then(
+          (totals): Measured => ({ ...totals, windows: gsc }),
+        )
       : null,
     ga4Status.evaluated
       ? DailyPulseRepository.organicSessionTotals(
           projectId,
           windowParams(ga4Status),
-        )
+        ).then((totals): Measured => ({ ...totals, windows: ga4Status }))
       : null,
   ]);
   const alerts = [

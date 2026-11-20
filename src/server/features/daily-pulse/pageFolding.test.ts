@@ -124,6 +124,26 @@ describe("folding a page's addresses", () => {
     );
   });
 
+  it("keeps the 10 largest established rising pages, looking past the first batch", async () => {
+    // The 12 largest risers are new; 13 established ones follow them.
+    for (let i = 0; i < 25; i++) {
+      const url = `https://hava.example/s${i}`;
+      if (i >= 12) await row(url, BEFORE, 1);
+      await row(url, RECENT, 1_000 - i);
+    }
+
+    const rising = (await alertsOf()).filter((alert) =>
+      alert.startsWith("rising_page"),
+    );
+
+    expect(rising).toEqual(
+      Array.from(
+        { length: 10 },
+        (_, i) => `rising_page https://hava.example/s${i + 12}`,
+      ),
+    );
+  });
+
   it("does not judge a day whose data is not final yet", async () => {
     const result = await DailyPulseService.compute("project", {
       now: NOW,

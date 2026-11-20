@@ -104,7 +104,7 @@ export function roseBy(recent: number, baseline: number, percent: number) {
 export const expectedFrom = (baseline: number) =>
   Math.round(((baseline * RECENT_DAYS) / BASELINE_DAYS) * 10) / 10;
 
-function changePercent(recent: number, baseline: number): number | null {
+export function changePercent(recent: number, baseline: number): number | null {
   const expected = (baseline * RECENT_DAYS) / BASELINE_DAYS;
   return expected === 0
     ? null
