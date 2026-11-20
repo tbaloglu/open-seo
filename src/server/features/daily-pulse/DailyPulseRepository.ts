@@ -1,6 +1,6 @@
-import { and, eq, gte, lte, sql, type SQLWrapper } from "drizzle-orm";
+import { and, eq, gte, lte, max, min, sql, type SQLWrapper } from "drizzle-orm";
 import { db } from "@/db";
-import { ga4DailySite, gscDailyPage } from "@/db/schema";
+import { ga4DailySite, gscDailyPage, gscDailySite } from "@/db/schema";
 
 // Reads of the search archive for the daily pulse. Every query is keyed by the
 // project the caller already authorized (or the archive run's own project).
@@ -54,6 +54,8 @@ async function pageTotals(projectId: string, windows: Windows) {
         windows.recentStart,
         windows.recentEnd,
       ),
+      // The last day the page had a row: which URL variant is current.
+      lastDate: max(date),
     })
     .from(gscDailyPage)
     .where(
@@ -64,6 +66,48 @@ async function pageTotals(projectId: string, windows: Windows) {
       ),
     )
     .groupBy(gscDailyPage.page);
+}
+
+/**
+ * Per page: the first day it ever had a row, through `through`. Read over the
+ * whole archive, since a page that was quiet in the baseline may be old.
+ */
+async function pageFirstDates(projectId: string, through: string) {
+  const rows = await db
+    .select({ page: gscDailyPage.page, first: min(gscDailyPage.date) })
+    .from(gscDailyPage)
+    .where(
+      and(
+        eq(gscDailyPage.projectId, projectId),
+        lte(gscDailyPage.date, through),
+      ),
+    )
+    .groupBy(gscDailyPage.page);
+  return new Map(rows.map((row) => [row.page, row.first ?? through]));
+}
+
+/** Search Console site clicks (all devices) in the baseline and the recent window. */
+async function siteClickTotals(projectId: string, windows: Windows) {
+  const { date, clicks } = gscDailySite;
+  const [row] = await db
+    .select({
+      baseline: sumBetween(
+        clicks,
+        date,
+        windows.baselineStart,
+        windows.baselineEnd,
+      ),
+      recent: sumBetween(clicks, date, windows.recentStart, windows.recentEnd),
+    })
+    .from(gscDailySite)
+    .where(
+      and(
+        eq(gscDailySite.projectId, projectId),
+        gte(gscDailySite.date, windows.baselineStart),
+        lte(gscDailySite.date, windows.recentEnd),
+      ),
+    );
+  return { baseline: row?.baseline ?? 0, recent: row?.recent ?? 0 };
 }
 
 /** GA4 organic sessions in the baseline and the recent window. */
@@ -97,5 +141,7 @@ async function organicSessionTotals(projectId: string, windows: Windows) {
 
 export const DailyPulseRepository = {
   pageTotals,
+  pageFirstDates,
+  siteClickTotals,
   organicSessionTotals,
 };

@@ -2,14 +2,15 @@ import { ga4DateInTimeZone } from "@/server/features/ga4/services/Ga4Dates";
 import { SeoTaskRepository } from "@/server/features/seo-tasks/repositories/SeoTaskRepository";
 import { SeoTaskService } from "@/server/features/seo-tasks/services/SeoTaskService";
 import type { SeoTask } from "@/shared/seo-tasks";
+import { compute, PULSE_TIME_ZONE } from "./pulseAlerts";
 import {
-  compute,
+  canonicalKey,
+  legacyMarkerOf,
   markerOf,
   PULSE_ALERT_TYPES,
-  PULSE_TIME_ZONE,
   TITLE_LABELS,
   type PulseAlertType,
-} from "./pulseAlerts";
+} from "./pulseShared";
 
 // The daily pulse's tasks: after each successful archive run the alerts
 // (pulseAlerts.ts) are written to the project's SEO tasks as proposals, one
@@ -20,6 +21,9 @@ const CODE_PREFIX = "N-";
 /**
  * A closed (done or dropped) alert task holds back the same alert this long,
  * so a page the owner removed on purpose is not proposed again every day.
+ * Only tasks the current rules wrote (evidence marked `[nabız/2: …]`) hold
+ * anything back: the first rules' false alerts, once dropped, must not hide
+ * real ones.
  */
 const CLOSED_ALERT_QUIET_DAYS = 28;
 
@@ -38,16 +42,23 @@ const DESCRIPTIONS: Record<PulseAlertType, string> = {
     "Sayfanın gösterimleri son 7 günde, önceki 28 günün temposuna göre hızla arttı. Yükselen aramaları görmek ve sayfayı onlara göre güçlendirmek için bir fırsat.",
   organic_sessions_drop:
     "Sitenin Google Analytics organik oturumları son 7 günde, önceki 28 günün temposuna göre sert düştü. Search Console tıklamalarıyla karşılaştırın; ölçüm (etiket) sorunu da olabilir.",
+  site_clicks_drop:
+    "Sitenin Search Console tıklamaları son 7 günde, önceki 28 günün temposuna göre sert düştü. Gösterim ve ortalama sıra değişimine, son yayınlara ve Google güncellemelerine bakın.",
+  host_change:
+    "Google sayfaları son 7 günde başka bir adresle (www ya da www'siz) göstermeye başladı. Tercih edilen adres, canonical etiketleri ve 301 yönlendirmeleri tutarlı mı kontrol edin.",
 };
 
 /**
  * The alert type a pulse task was written for: from the marker that starts
- * its evidence, else (evidence edited away) from its title's label.
+ * its evidence (either version), else (evidence edited away) from its title's
+ * label.
  */
 function alertTypeOf(task: SeoTask): PulseAlertType | null {
   return (
-    PULSE_ALERT_TYPES.find((type) =>
-      task.evidence?.startsWith(markerOf(type)),
+    PULSE_ALERT_TYPES.find(
+      (type) =>
+        task.evidence?.startsWith(markerOf(type)) ||
+        task.evidence?.startsWith(legacyMarkerOf(type)),
     ) ??
     PULSE_ALERT_TYPES.find((type) =>
       task.title.startsWith(`${TITLE_LABELS[type]}:`),
@@ -56,8 +67,9 @@ function alertTypeOf(task: SeoTask): PulseAlertType | null {
   );
 }
 
+/** One alert per type and page; www and bare-host addresses are one page. */
 const alertKey = (type: PulseAlertType, url: string | null) =>
-  `${type} ${url ?? ""}`;
+  `${type} ${url ? canonicalKey(url) : ""}`;
 
 /**
  * Computes today's alerts and writes them to the project's SEO tasks. An
@@ -85,7 +97,12 @@ async function recordAlerts(projectId: string, now: Date = new Date()) {
     if (!type) continue;
     const key = alertKey(type, task.affectedUrls[0] ?? null);
     if (OPEN_STATUSES.has(task.status)) open.set(key, task);
-    else if (task.statusChangedAt >= quietSince) quiet.add(key);
+    else if (
+      task.statusChangedAt >= quietSince &&
+      task.evidence?.startsWith(markerOf(type))
+    ) {
+      quiet.add(key);
+    }
   }
 
   const day = ga4DateInTimeZone(now, PULSE_TIME_ZONE).replaceAll("-", "");
@@ -105,7 +122,13 @@ async function recordAlerts(projectId: string, now: Date = new Date()) {
     const key = alertKey(alert.type, alert.url);
     const task = open.get(key);
     if (task) {
-      writes.push({ id: task.id, evidence: alert.evidence });
+      // The page may now be reported under its other address.
+      const moved = alert.url !== null && task.affectedUrls[0] !== alert.url;
+      writes.push({
+        id: task.id,
+        evidence: alert.evidence,
+        ...(moved && alert.url ? { affectedUrls: [alert.url] } : {}),
+      });
     } else if (quiet.has(key)) {
       skipped++;
     } else {
