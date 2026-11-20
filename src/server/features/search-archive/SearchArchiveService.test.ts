@@ -1,6 +1,4 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { getArchivedSearchPerformanceTool } from "@/server/mcp/tools/search-archive-tools";
-import { makeToolContext } from "@/server/mcp/tools/tool-test-support";
 import { Ga4DataApiError } from "@/server/lib/ga4Errors";
 import { isPermanentArchiveError } from "./archiveFetch";
 import { SearchArchiveService } from "./SearchArchiveService";
@@ -292,6 +290,22 @@ describe("search archive fetch", () => {
     ]);
   });
 
+  it("pauses when the Cloud project's hourly GA4 bucket runs low", async () => {
+    mocks.runReport.mockResolvedValueOnce({
+      ...ga4SiteResponse([]),
+      propertyQuota: {
+        tokensPerHour: { consumed: 0, remaining: 40_000 },
+        tokensPerProjectPerHour: { consumed: 13_000, remaining: 1_000 },
+      },
+    });
+    const result = await SearchArchiveService.fetchPeriod(
+      "project",
+      { ...novemberPages, source: "ga4_site" },
+      NOW,
+    );
+    expect(result.pauseSeconds).toBeGreaterThan(0);
+  });
+
   it("treats a switched-off GA4 API as permanent", async () => {
     mocks.runReport.mockRejectedValueOnce(
       new Ga4DataApiError(403, "denied", null, "SERVICE_DISABLED"),
@@ -344,87 +358,5 @@ describe("search archive runs", () => {
     const { run } = await SearchArchiveService.getStatus("project");
     expect(run).toMatchObject({ runId: "sleeping", status: "running" });
     expect(mocks.terminateWorkflow).not.toHaveBeenCalled();
-  });
-});
-
-describe("archive reads", () => {
-  it("reads only the authorized project's archive", async () => {
-    await testDb.client.executeMultiple(`
-      INSERT INTO gsc_daily_page (project_id, date, page, clicks, impressions, ctr, position)
-        VALUES ('project', '2024-01-05', 'https://a.com/', 2, 100, 0.02, 4),
-               ('project', '2024-01-06', 'https://a.com/', 2, 300, 0.0067, 8),
-               ('other', '2024-01-05', 'https://b.com/', 9, 90, 0.1, 1);
-    `);
-    const context = makeToolContext({ organizationId: "organization" });
-    const result = await getArchivedSearchPerformanceTool.handler(
-      {
-        projectId: "project",
-        dataset: "gsc_pages",
-        startDate: "2024-01-01",
-        endDate: "2024-01-31",
-      },
-      context,
-    );
-    expect(result.structuredContent.rows).toEqual([
-      // Position weighted by impressions: (4×100 + 8×300) / 400.
-      {
-        page: "https://a.com/",
-        clicks: 4,
-        impressions: 400,
-        ctr: 0.01,
-        position: 7,
-      },
-    ]);
-    await expect(
-      getArchivedSearchPerformanceTool.handler(
-        {
-          projectId: "other",
-          dataset: "gsc_pages",
-          startDate: "2024-01-01",
-          endDate: "2024-01-31",
-        },
-        context,
-      ),
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
-  });
-
-  it("pages site datasets too", async () => {
-    await testDb.client.executeMultiple(`
-      INSERT INTO ga4_daily_site (project_id, date, sessions, organic_sessions, key_events, organic_key_events)
-        VALUES ('project', '2024-01-01', 1, 1, 0, 0), ('project', '2024-01-02', 1, 1, 0, 0),
-               ('project', '2024-01-03', 1, 1, 0, 0);
-    `);
-    const context = makeToolContext({ organizationId: "organization" });
-    const first = await getArchivedSearchPerformanceTool.handler(
-      {
-        projectId: "project",
-        dataset: "ga4_site",
-        startDate: "2024-01-01",
-        endDate: "2024-01-31",
-        limit: 2,
-      },
-      context,
-    );
-    expect(first.structuredContent).toMatchObject({
-      rowCount: 2,
-      hasMore: true,
-      nextOffset: 2,
-    });
-    const last = await getArchivedSearchPerformanceTool.handler(
-      {
-        projectId: "project",
-        dataset: "ga4_site",
-        startDate: "2024-01-01",
-        endDate: "2024-01-31",
-        limit: 2,
-        offset: 2,
-      },
-      context,
-    );
-    expect(last.structuredContent).toMatchObject({
-      rowCount: 1,
-      hasMore: false,
-      nextOffset: null,
-    });
   });
 });

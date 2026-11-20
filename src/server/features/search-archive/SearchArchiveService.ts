@@ -31,7 +31,7 @@ const STARTUP_GRACE_MS = 60_000;
  * backfill that waits out GA4's quota month after month can pass the usual
  * 12-hour stuck limit while healthy.
  */
-const ACTIVE_RUN_LIMIT_MS = 48 * 60 * 60_000;
+export const ACTIVE_RUN_LIMIT_MS = 48 * 60 * 60_000;
 
 export type ArchiveJobPayload = {
   projectId: string;
@@ -189,6 +189,35 @@ async function start(projectId: string, mode: ArchiveMode) {
   };
 }
 
+/**
+ * Settles the project's run if it is marked running but its workflow stopped
+ * (or ran past its limit). Returns whether it is still running.
+ */
+async function settle(projectId: string): Promise<boolean> {
+  const run = await SearchArchiveRepository.getRun(projectId);
+  return Boolean(
+    run && (await settleDeadRun(projectId, run)).status === "running",
+  );
+}
+
+/**
+ * Records a start that could not happen (nothing connected any more) as a
+ * failed run, so the daily schedule backs off instead of trying every tick.
+ */
+async function recordStartFailure(
+  projectId: string,
+  mode: ArchiveMode,
+  note: string,
+) {
+  const existing = await SearchArchiveRepository.getRun(projectId);
+  const runId = crypto.randomUUID();
+  const claimed = await SearchArchiveRepository.claimRun(
+    { projectId, runId, mode, startedAt: new Date().toISOString() },
+    existing?.runId ?? null,
+  );
+  if (claimed) await finishRun(projectId, runId, { ok: false, note });
+}
+
 async function finishRun(
   projectId: string,
   runId: string,
@@ -214,7 +243,7 @@ async function recordProgress(
 
 /** The latest run and what the archive holds, per source. */
 async function getStatus(projectId: string) {
-  const [latest, coverage, gsc, ga4] = await Promise.all([
+  const [latest, scanned, gsc, ga4] = await Promise.all([
     SearchArchiveRepository.getRun(projectId),
     SearchArchiveRepository.coverage(projectId),
     GscConnectionRepository.getByProjectId(projectId),
@@ -223,6 +252,18 @@ async function getStatus(projectId: string) {
   // A run whose workflow died would otherwise read "running" forever and
   // keep the archive button locked.
   const run = latest && (await settleDeadRun(projectId, latest));
+  // A scanned month can be empty (the site had no data yet), so each source
+  // also says which dates actually hold rows; null when none do. For
+  // gsc_query_page they are months (YYYY-MM).
+  const coverage = await Promise.all(
+    scanned.map(async (row) => {
+      const data = await SearchArchiveReadRepository.dataRange(
+        projectId,
+        row.source,
+      );
+      return { ...row, firstDataDate: data.first, lastDataDate: data.last };
+    }),
+  );
   return {
     run,
     coverage,
@@ -296,6 +337,8 @@ export const SearchArchiveService = {
   plan,
   fetchPeriod,
   start,
+  settle,
+  recordStartFailure,
   finishRun,
   recordProgress,
   getStatus,

@@ -149,6 +149,25 @@ async function findByCodes(projectId: string, codes: string[]) {
   return rows;
 }
 
+/** The project's tasks whose code starts with `prefix`, with their URLs. */
+async function listByCodePrefix(
+  projectId: string,
+  prefix: string,
+): Promise<SeoTask[]> {
+  const rows = await db
+    .select()
+    .from(seoTasks)
+    .where(
+      and(
+        eq(seoTasks.projectId, projectId),
+        // substr instead of LIKE: LIKE folds case on SQLite only.
+        eq(sql`substr(${seoTasks.code}, 1, ${prefix.length})`, prefix),
+      ),
+    )
+    .orderBy(asc(seoTasks.code));
+  return withUrls(rows);
+}
+
 async function countForProject(projectId: string): Promise<number> {
   const [{ total }] = await db
     .select({ total: count() })
@@ -230,6 +249,7 @@ export const SeoTaskRepository = {
   countByStatus,
   findByIds,
   findByCodes,
+  listByCodePrefix,
   countForProject,
   insert,
   update,

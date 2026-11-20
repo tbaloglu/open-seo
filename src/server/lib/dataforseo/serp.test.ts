@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 vi.mock("@/server/lib/runtime-env", () => ({
   // AUTH_MODE unset: the deployment holds the DataForSEO key.
@@ -141,6 +142,33 @@ describe("rank check task queue", () => {
       "task_post",
     ]);
   });
+
+  it.each([
+    [40, true],
+    [30, false],
+  ])(
+    "asks for asynchronous AI Overviews at depth %i: %s",
+    async (depth, expected) => {
+      const fetchMock = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(Response.json({ status_code: 20000, tasks: [] }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      await postRankCheckTasks({
+        tasks: [{ keyword: "alpha", keywordId: "kw-1", device: "mobile" }],
+        locationCode: 2792,
+        languageCode: "tr",
+        depth,
+      });
+
+      const [task] = z
+        .array(
+          z.looseObject({ load_async_ai_overview: z.boolean().optional() }),
+        )
+        .parse(parseDataforseoRequestBody(fetchMock.mock.calls[0]?.[1]));
+      expect(task.load_async_ai_overview === true).toBe(expected);
+    },
+  );
 
   it("reports a queued task still in progress as pending", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(

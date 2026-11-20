@@ -354,6 +354,13 @@ export default {
         await runScheduledAiVisibility();
       }),
       withPgClient(() => sendFirstAuditEmails()),
+      // Daily search archive and pulse (fork): a few projects per tick from
+      // 06:00 Istanbul time.
+      withPgClient(async () => {
+        const { runScheduledSearchArchive } =
+          await import("@/server/features/search-archive/scheduledSearchArchive");
+        await runScheduledSearchArchive();
+      }),
     ]);
     for (const result of checks)
       if (result.status === "rejected") throw result.reason;

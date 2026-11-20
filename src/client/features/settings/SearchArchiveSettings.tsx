@@ -98,8 +98,10 @@ export function SearchArchiveSettings({ projectId }: { projectId: string }) {
               <ul className="space-y-0.5 text-muted-foreground">
                 {coverage.map((row) => (
                   <li key={row.source}>
-                    {SOURCE_LABELS[row.source] ?? row.source}: {row.firstMonth}{" "}
-                    → {row.lastDate}
+                    {SOURCE_LABELS[row.source] ?? row.source}:{" "}
+                    {row.firstDataDate && row.lastDataDate
+                      ? `${row.firstDataDate} → ${row.lastDataDate}`
+                      : "no data yet"}
                   </li>
                 ))}
               </ul>

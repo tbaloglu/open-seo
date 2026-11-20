@@ -1,5 +1,6 @@
 import type { WorkflowStep } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
+import { DailyPulseService } from "@/server/features/daily-pulse/DailyPulseService";
 import { isPermanentArchiveError } from "@/server/features/search-archive/archiveFetch";
 import type { ArchiveFetch } from "@/server/features/search-archive/archivePlan";
 import {
@@ -143,6 +144,21 @@ export async function runSearchArchive(
       }
       if (!outcome.quotaWait) break;
     }
+  }
+  // The archive is fresh: write the daily pulse's alerts to the project's
+  // tasks before the run reads as finished, so a pulse caught mid-way is not
+  // mistaken for done. It only reads the archive; a failure is logged and the
+  // run still completes.
+  try {
+    const pulse = await pgStep(step, "pulse", undefined, () =>
+      DailyPulseService.recordAlerts(projectId),
+    );
+    console.log({ event: "daily_pulse_recorded", projectId, ...pulse });
+  } catch (error) {
+    console.error(
+      `[search-archive] run ${runId}: daily pulse failed: ${describeError(error)}`,
+      error,
+    );
   }
   try {
     await pgStep(step, "finish", undefined, () =>

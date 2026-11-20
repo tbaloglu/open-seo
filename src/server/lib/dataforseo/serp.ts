@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- one file per DataForSEO section (see index.ts); SERP spans live, rank-check, merged-read and Maps queue calls */
 import { z } from "zod";
 import { isGoogleRedirect } from "@/shared/google-serp-url";
+import { loadsAsyncAiOverview } from "@/shared/rank-tracking";
 import { dataforseoGet, dataforseoPost } from "@/server/lib/dataforseo/core";
 import { MAX_TASKS_PER_POST } from "@/server/lib/dataforseo/shared";
 import {
@@ -286,6 +287,9 @@ export async function postRankCheckTasks(input: {
       // swaps in those results when Google served a poisoned page. Costs one
       // more standard-queue page per task, poisoned or not.
       resolve_poisoned_results: true,
+      // Deep checks also wait for AI Overviews Google loads after the page;
+      // priced in costPerRankCheckRead.
+      ...(loadsAsyncAiOverview(depth) && { load_async_ai_overview: true }),
       // Echoed back on the response entry and task_get; used to map a
       // DataForSEO task id back to our keyword without relying on order.
       tag: `${task.keywordId}:${task.device}`,

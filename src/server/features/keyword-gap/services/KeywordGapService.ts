@@ -249,7 +249,8 @@ async function getKeywordGap(
     billingCustomer,
   );
 
-  let matched = 0;
+  let ranking = 0;
+  let belowThreshold = 0;
   const gap: KeywordGapData["keywords"] = [];
   const seen = new Set<string>();
   for (const row of competitor.keywords) {
@@ -261,8 +262,11 @@ async function getKeywordGap(
       our && our.impressions > 0
         ? Math.round((our.positionSum / our.impressions) * 10) / 10
         : null;
-    if (ourPosition != null) matched++;
-    if (ourPosition != null && ourPosition <= input.positionThreshold) continue;
+    if (ourPosition != null && ourPosition <= input.positionThreshold) {
+      ranking++;
+      continue;
+    }
+    if (ourPosition != null) belowThreshold++;
     gap.push({
       keyword: row.keyword,
       searchVolume: row.searchVolume,
@@ -292,8 +296,10 @@ async function getKeywordGap(
     positionThreshold: input.positionThreshold,
     counts: {
       competitorTotal: seen.size,
-      competitorTotalInLabs: competitor.totalCount,
-      matched,
+      competitorKeywordsWithinMaxRank: competitor.totalCount,
+      noImpressions: sorted.length - belowThreshold,
+      belowThreshold,
+      ranking,
       gap: sorted.length,
       returned: Math.min(sorted.length, input.limit),
     },

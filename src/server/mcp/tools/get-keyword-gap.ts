@@ -108,7 +108,7 @@ export const getKeywordGapTool = {
   config: {
     title: "Get keyword gap",
     description:
-      "Find keywords a competitor ranks for where the project's site is missing or weak: the competitor's organic keywords from DataForSEO Labs (rank maxRank or better, default 30), compared with the project's Search Console queries (default last 3 months). A keyword is a gap when the site has no Search Console impressions for it or its average position is worse than positionThreshold (default 20). Matching is exact phrase after case folding (Turkish i/İ/ı/I are one letter) and whitespace normalization; no fuzzy matching. Each row has volume, the competitor's rank and URL, intent, and the site's impressions, clicks, and position (null if none), sorted by volume. Labs covers non-English long-tail queries thinly and Search Console hides rare queries, so treat the result as a topic map, not a complete list. Search Console is not filtered by country, while the competitor's keywords are for one country (the project's market unless locationCode is set). Requires a connected Search Console property, which is read first so an unconnected project spends nothing. Costs ~15-170 credits (one Labs call billed per returned row, up to 1,000), well under the 2,000-credit confirmation threshold; cached for 12 hours. For the competitor's full keyword list, use get_ranked_keywords.",
+      "Find keywords a competitor ranks for where the project's site is missing or weak: the competitor's organic keywords from DataForSEO Labs (rank maxRank or better, default 30), compared with the project's Search Console queries (default last 3 months). A keyword is a gap when the site has no Search Console impressions for it or its average position is worse than positionThreshold (default 20). Matching is exact phrase after case folding (Turkish i/İ/ı/I are one letter) and whitespace normalization; no fuzzy matching. Each row has volume, the competitor's rank and URL, intent, and the site's impressions, clicks, and position (null if none), sorted by volume. counts splits the compared keywords into three disjoint groups that add up to competitorTotal: ranking (position at positionThreshold or better), belowThreshold (impressions, but a worse position) and noImpressions; gap = noImpressions + belowThreshold. competitorKeywordsWithinMaxRank is how many keywords Labs has for the competitor at maxRank or better, of which competitorLimit are read. Labs covers non-English long-tail queries thinly and Search Console hides rare queries, so treat the result as a topic map, not a complete list. Search Console is not filtered by country, while the competitor's keywords are for one country (the project's market unless locationCode is set). Requires a connected Search Console property, which is read first so an unconnected project spends nothing. Costs ~15-170 credits (one Labs call billed per returned row, up to 1,000), well under the 2,000-credit confirmation threshold; cached for 12 hours. For the competitor's full keyword list, use get_ranked_keywords.",
     inputSchema,
     outputSchema: keywordGapSchema.partial().extend({
       ok: z.boolean(),
@@ -189,9 +189,9 @@ export const getKeywordGapTool = {
 
     const { counts } = result;
     const inLabs =
-      counts.competitorTotalInLabs != null &&
-      counts.competitorTotalInLabs > counts.competitorTotal
-        ? ` (of ${counts.competitorTotalInLabs} in Labs)`
+      counts.competitorKeywordsWithinMaxRank != null &&
+      counts.competitorKeywordsWithinMaxRank > counts.competitorTotal
+        ? ` (read ${counts.competitorTotal} of the ${counts.competitorKeywordsWithinMaxRank} Labs has at that rank)`
         : "";
     const shown =
       counts.returned < counts.gap
@@ -202,9 +202,11 @@ export const getKeywordGapTool = {
       : "";
     const header =
       `${result.competitor} vs ${result.siteUrl} · Search Console ${result.startDate}→${result.endDate} · ` +
-      `competitor keywords at rank ≤${result.maxRank}: ${counts.competitorTotal}${inLabs} · ` +
-      `we also have impressions for ${counts.matched} · ` +
-      `gap (no impressions or position worse than ${result.positionThreshold}): ${counts.gap}${shown}.${truncated}`;
+      `competitor keywords at rank ≤${result.maxRank} compared: ${counts.competitorTotal}${inLabs} · ` +
+      `we rank at position ≤${result.positionThreshold}: ${counts.ranking} · ` +
+      `we have impressions but rank worse than ${result.positionThreshold}: ${counts.belowThreshold} · ` +
+      `no impressions: ${counts.noImpressions} · ` +
+      `gap (no impressions + worse than ${result.positionThreshold}): ${counts.gap}${shown}.${truncated}`;
     const text =
       result.keywords.length > 0
         ? `${header}\n${formatMcpTable(result.keywords, GAP_COLUMNS)}`
