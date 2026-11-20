@@ -15,6 +15,7 @@ import * as sqliteLocalSeo from "./local-seo.schema";
 import * as sqliteStripeProjects from "./stripe-projects.schema";
 import * as sqliteEmbeds from "./embeds.schema";
 import * as sqliteFork from "./fork.schema";
+import * as sqliteEveryAppTransfer from "./every-app-transfer.schema";
 import * as pgApp from "./pg/app.schema";
 import * as pgProjectContext from "./pg/project-context.schema";
 import * as pgReports from "./pg/reports.schema";
@@ -31,6 +32,7 @@ import * as pgLocalSeo from "./pg/local-seo.schema";
 import * as pgStripeProjects from "./pg/stripe-projects.schema";
 import * as pgEmbeds from "./pg/embeds.schema";
 import * as pgFork from "./pg/fork.schema";
+import * as pgEveryAppTransfer from "./pg/every-app-transfer.schema";
 
 // Canonical schema barrel. Repositories import their tables from here and the
 // provider-aware `db` from "@/db", so each repository is written ONCE for both
@@ -57,7 +59,8 @@ type AppSchema = typeof sqliteApp &
   typeof sqliteLocalSeo &
   typeof sqliteStripeProjects &
   typeof sqliteEmbeds &
-  typeof sqliteFork;
+  typeof sqliteFork &
+  typeof sqliteEveryAppTransfer;
 
 const runtimeSchema =
   getDatabaseProvider() === "postgres"
@@ -78,6 +81,7 @@ const runtimeSchema =
         ...pgStripeProjects,
         ...pgEmbeds,
         ...pgFork,
+        ...pgEveryAppTransfer,
       }
     : {
         ...sqliteApp,
@@ -96,6 +100,7 @@ const runtimeSchema =
         ...sqliteStripeProjects,
         ...sqliteEmbeds,
         ...sqliteFork,
+        ...sqliteEveryAppTransfer,
       };
 
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- guarded by schema-parity.test.ts
@@ -172,4 +177,6 @@ export const {
   searchArchivePeriods,
   searchArchiveRuns,
   projectTopicWords,
+  everyAppTransfers,
+  everyAppTransferUsers,
 } = schema;

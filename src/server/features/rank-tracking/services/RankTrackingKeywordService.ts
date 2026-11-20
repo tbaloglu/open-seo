@@ -3,7 +3,10 @@ import {
   createDataforseoClient,
   fetchKeywordMetricsForList,
 } from "@/server/lib/dataforseo";
-import { resolveKeywordDataLanguage } from "@/shared/keyword-locations";
+import {
+  getKeywordDataCountryCode,
+  resolveKeywordDataLanguage,
+} from "@/shared/keyword-locations";
 import {
   legacyTurkicLowercase,
   withoutStrayDot,
@@ -178,6 +181,7 @@ async function refreshMetrics(
   const keywords = await RankTrackingRepository.getKeywordsForConfig(configId);
   if (keywords.length === 0) return { updated: 0 };
 
+  const countryCode = getKeywordDataCountryCode(config);
   const client = createDataforseoClient(billingCustomer);
   // Also drops the stray dot older rows ("i\u0307stanbul") and match-case
   // "İstanbul" on a non-Turkish tracker would otherwise carry.
@@ -188,13 +192,10 @@ async function refreshMetrics(
     // its lowercase twin; both then map to the same metrics row and the
     // request carries no duplicates.
     keywords: [...new Set(keywords.map((kw) => lower(kw.keyword)))],
-    locationCode: config.locationCode,
+    locationCode: countryCode,
     // Trackers can pair any SERP language with any country; the keyword-data
     // APIs only serve the country's own languages.
-    languageCode: resolveKeywordDataLanguage(
-      config.locationCode,
-      config.languageCode,
-    ),
+    languageCode: resolveKeywordDataLanguage(countryCode, config.languageCode),
     // Local configs get volume/CPC scoped to the tracked city; national
     // numbers can overstate local demand by orders of magnitude.
     locationName: config.locationName ?? undefined,
