@@ -145,19 +145,10 @@ export async function runSearchArchive(
       if (!outcome.quotaWait) break;
     }
   }
-  try {
-    await pgStep(step, "finish", undefined, () =>
-      SearchArchiveService.finishRun(projectId, runId, {
-        ok: true,
-        rowsWritten,
-        note: planned.notes.length > 0 ? planned.notes.join(" ") : null,
-      }),
-    );
-  } catch (error) {
-    return fail(error);
-  }
   // The archive is fresh: write the daily pulse's alerts to the project's
-  // tasks. It only reads the archive, and a failure leaves the run completed.
+  // tasks before the run reads as finished, so a pulse caught mid-way is not
+  // mistaken for done. It only reads the archive; a failure is logged and the
+  // run still completes.
   try {
     const pulse = await pgStep(step, "pulse", undefined, () =>
       DailyPulseService.recordAlerts(projectId),
@@ -168,5 +159,16 @@ export async function runSearchArchive(
       `[search-archive] run ${runId}: daily pulse failed: ${describeError(error)}`,
       error,
     );
+  }
+  try {
+    await pgStep(step, "finish", undefined, () =>
+      SearchArchiveService.finishRun(projectId, runId, {
+        ok: true,
+        rowsWritten,
+        note: planned.notes.length > 0 ? planned.notes.join(" ") : null,
+      }),
+    );
+  } catch (error) {
+    return fail(error);
   }
 }

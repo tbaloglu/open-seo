@@ -32,6 +32,7 @@ vi.mock("@/server/features/projects/services/ProjectService", () => ({
 
 // Nov 20 in Pacific Time and Istanbul. The latest complete Search Console day
 // is Nov 17, so the recent window is Nov 11–17 and the baseline Oct 14–Nov 10.
+// Analytics lags 2 days in Istanbul: Nov 12–18 against Oct 15–Nov 11.
 const NOW = new Date("2026-11-20T12:00:00Z");
 const BASELINE_DAY = "2026-10-14";
 const RECENT_DAY = "2026-11-17";
@@ -76,7 +77,7 @@ async function organicSessions(baseline: number, recent: number) {
   await testDb.client.execute({
     sql: `INSERT INTO ga4_daily_site (project_id, date, sessions, organic_sessions, key_events, organic_key_events)
       VALUES ('project', ?, 0, ?, 0, 0), ('project', ?, 0, ?, 0, 0)`,
-    args: [BASELINE_DAY, baseline, RECENT_DAY, recent],
+    args: ["2026-10-15", baseline, "2026-11-18", recent],
   });
 }
 
@@ -115,7 +116,7 @@ beforeEach(async () => {
       VALUES ('project', 'gsc_page', '2026-10', '2026-10-31', 1, 1, '2026-11-05T00:00:00.000Z'),
              ('project', 'gsc_page', '2026-11', '2026-11-19', 0, 1, '2026-11-20T00:00:00.000Z'),
              ('project', 'ga4_site', '2026-10', '2026-10-31', 1, 1, '2026-11-05T00:00:00.000Z'),
-             ('project', 'ga4_site', '2026-11', '2026-11-17', 0, 1, '2026-11-20T00:00:00.000Z');
+             ('project', 'ga4_site', '2026-11', '2026-11-19', 0, 1, '2026-11-20T00:00:00.000Z');
   `);
   getProjectForOrganization.mockImplementation(
     async (organizationId: string, projectId: string) =>
@@ -204,16 +205,62 @@ describe("daily pulse rules", () => {
     }
   });
 
-  it("skips a source whose archive does not reach back to the baseline", async () => {
-    await testDb.client.execute(
-      "DELETE FROM search_archive_periods WHERE month = '2026-10'",
-    );
+  it.each([
+    [
+      "a missing month",
+      "DELETE FROM search_archive_periods WHERE source = 'gsc_page' AND month = '2026-10'",
+    ],
+    [
+      "a month read only part way",
+      "UPDATE search_archive_periods SET fetched_through = '2026-10-20' WHERE source = 'gsc_page' AND month = '2026-10'",
+    ],
+    [
+      "an archive that stopped before the window's end",
+      "UPDATE search_archive_periods SET fetched_through = '2026-11-16' WHERE source = 'gsc_page' AND month = '2026-11'",
+    ],
+  ])("skips Search Console with %s", async (_name, change) => {
+    await testDb.client.execute(change);
     await page("/tursucular/giresun", { clicks: 30, impressions: 80 }, null);
 
     const result = await pulse();
 
     expect(result.gsc).toMatchObject({ evaluated: false });
     expect(result.alerts).toEqual([]);
+  });
+
+  it("skips stale Analytics data while judging fresh Search Console data", async () => {
+    await testDb.client.execute(
+      "UPDATE search_archive_periods SET fetched_through = '2026-11-10' WHERE source = 'ga4_site' AND month = '2026-11'",
+    );
+    await organicSessions(100, 0);
+    await page("/tursucular/giresun", { clicks: 30, impressions: 80 }, null);
+
+    const result = await pulse();
+
+    expect(result.ga4).toMatchObject({ evaluated: false });
+    expect(result.alerts.map((alert) => alert.type)).toEqual([
+      "page_disappeared",
+    ]);
+  });
+
+  it("keeps the 10 largest alerts per rule", async () => {
+    for (let i = 1; i <= 11; i++) {
+      await page(`/p${i}`, { clicks: 0, impressions: 50 + i }, null);
+    }
+    const alerts = (await pulse()).alerts;
+    expect(alerts).toHaveLength(10);
+    expect(alerts.map((alert) => alert.baseline)).not.toContain(51);
+  });
+
+  it("titles a page by its decoded path, cut to the title limit", async () => {
+    await page("/t%C3%BCr%C5%9Fu", { clicks: 0, impressions: 60 }, null);
+    await page(`/${"a".repeat(400)}`, { clicks: 0, impressions: 50 }, null);
+
+    const [short, long] = (await pulse()).alerts;
+
+    expect(short.title).toBe("Gösterim kesildi: /türşu");
+    expect(long.title).toHaveLength(300);
+    expect(long.title.startsWith("Gösterim kesildi: /aaa")).toBe(true);
   });
 });
 
@@ -285,6 +332,32 @@ describe("daily pulse tasks", () => {
     expect(result).toMatchObject({ created: 0, skipped: 1 });
     expect(await tasks()).toHaveLength(1);
   });
+
+  it("proposes an alert again once it was closed more than 28 days ago", async () => {
+    await page("/tursucular/giresun", { clicks: 30, impressions: 80 }, null);
+    await DailyPulseService.recordAlerts("project", NOW);
+    await testDb.client.execute(
+      `UPDATE seo_tasks SET status = 'done', status_changed_at = '2026-10-22T00:00:00.000Z'`,
+    );
+
+    const result = await DailyPulseService.recordAlerts("project", NOW);
+
+    expect(result).toMatchObject({ created: 1, skipped: 0 });
+    expect(await tasks()).toHaveLength(2);
+  });
+
+  it("matches the site-wide organic alert, and an alert whose title was edited", async () => {
+    await organicSessions(100, 0);
+    await DailyPulseService.recordAlerts("project", NOW);
+    await testDb.client.execute(
+      "UPDATE seo_tasks SET title = 'Organik trafik neden düştü?'",
+    );
+
+    const result = await DailyPulseService.recordAlerts("project", NOW);
+
+    expect(result).toMatchObject({ created: 0, updated: 1, errors: 0 });
+    expect(await tasks()).toHaveLength(1);
+  });
 });
 
 describe("get_daily_pulse", () => {
@@ -303,5 +376,11 @@ describe("get_daily_pulse", () => {
     await expect(
       getDailyPulseTool.handler({ projectId: "other" }, context),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("rejects a date that does not exist", () => {
+    const { date } = getDailyPulseTool.config.inputSchema;
+    expect(date.safeParse("2026-02-28").success).toBe(true);
+    expect(date.safeParse("2026-02-30").success).toBe(false);
   });
 });

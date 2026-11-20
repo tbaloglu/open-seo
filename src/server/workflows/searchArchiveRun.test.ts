@@ -106,8 +106,8 @@ describe("search archive run", () => {
       "plan",
       "gsc_site-2026-01",
       "gsc_site-2026-02",
-      "finish",
       "pulse",
+      "finish",
     ]);
     expect(second.names).toEqual(first.names);
     expect(mocks.finishRun).toHaveBeenLastCalledWith("project", "run", {

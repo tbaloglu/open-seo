@@ -343,11 +343,19 @@ async function fetchGa4(projectId: string, fetch: ArchiveFetch) {
   );
 }
 
+/**
+ * A pause when either hourly bucket runs low: the property's, or the one this
+ * Cloud project shares across every property it reads (the tighter of the
+ * two, 14,000 tokens on a standard property).
+ */
 function pauseFor(quota: Ga4Quota | null | undefined): number {
-  const remaining = quota?.tokensPerHour?.remaining;
-  return remaining !== undefined && remaining < GA4_LOW_HOURLY_TOKENS
-    ? GA4_LOW_QUOTA_PAUSE_SECONDS
-    : 0;
+  const low = [
+    quota?.tokensPerHour?.remaining,
+    quota?.tokensPerProjectPerHour?.remaining,
+  ].some(
+    (remaining) => remaining !== undefined && remaining < GA4_LOW_HOURLY_TOKENS,
+  );
+  return low ? GA4_LOW_QUOTA_PAUSE_SECONDS : 0;
 }
 
 /**

@@ -1,8 +1,6 @@
 import { z } from "zod";
-import {
-  DailyPulseService,
-  PULSE_ALERT_TYPES,
-} from "@/server/features/daily-pulse/DailyPulseService";
+import { DailyPulseService } from "@/server/features/daily-pulse/DailyPulseService";
+import { PULSE_ALERT_TYPES } from "@/server/features/daily-pulse/pulseAlerts";
 import { buildProjectMeta } from "@/server/mcp/context";
 import { mcpResponse } from "@/server/mcp/formatters";
 import { optionalMetaOutputSchema } from "@/server/mcp/output-schemas";
@@ -17,9 +15,17 @@ const inputSchema = {
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD.")
-    .refine((value) => !Number.isNaN(Date.parse(`${value}T00:00:00Z`)), {
-      message: "Not a real date.",
-    })
+    // Round-trip, so 2026-02-30 (which Date rolls over to March 2) fails.
+    .refine(
+      (value) => {
+        const parsed = new Date(`${value}T00:00:00Z`);
+        return (
+          !Number.isNaN(parsed.getTime()) &&
+          parsed.toISOString().slice(0, 10) === value
+        );
+      },
+      { message: "Not a real date." },
+    )
     .optional()
     .describe(
       "Last day (YYYY-MM-DD) of the 7-day window. Defaults to the latest complete day in the archive: 3 days ago (Pacific Time) for Search Console, 2 days ago for Analytics.",

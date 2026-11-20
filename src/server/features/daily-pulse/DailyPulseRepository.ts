@@ -1,6 +1,6 @@
-import { and, eq, gte, lte, max, min, sql, type SQLWrapper } from "drizzle-orm";
+import { and, eq, gte, lte, sql, type SQLWrapper } from "drizzle-orm";
 import { db } from "@/db";
-import { ga4DailySite, gscDailyPage, searchArchivePeriods } from "@/db/schema";
+import { ga4DailySite, gscDailyPage } from "@/db/schema";
 
 // Reads of the search archive for the daily pulse. Every query is keyed by the
 // project the caller already authorized (or the archive run's own project).
@@ -23,33 +23,6 @@ const sumBetween = (
   sql<number>`coalesce(sum(case when ${date} >= ${from} and ${date} <= ${to} then ${value} else 0 end), 0)`.mapWith(
     Number,
   );
-
-/**
- * The days the archive job has read for a source: from the first day of its
- * first month to the last day it fetched. Read from the job's bookkeeping, not
- * the rows, because a page (or a whole site) with no impressions has no rows.
- */
-async function archivedDays(
-  projectId: string,
-  source: "gsc_page" | "ga4_site",
-) {
-  const [row] = await db
-    .select({
-      firstMonth: min(searchArchivePeriods.month),
-      last: max(searchArchivePeriods.fetchedThrough),
-    })
-    .from(searchArchivePeriods)
-    .where(
-      and(
-        eq(searchArchivePeriods.projectId, projectId),
-        eq(searchArchivePeriods.source, source),
-      ),
-    );
-  return {
-    first: row?.firstMonth ? `${row.firstMonth}-01` : null,
-    last: row?.last ?? null,
-  };
-}
 
 /** Per page: clicks and impressions in the baseline and the recent window. */
 async function pageTotals(projectId: string, windows: Windows) {
@@ -123,7 +96,6 @@ async function organicSessionTotals(projectId: string, windows: Windows) {
 }
 
 export const DailyPulseRepository = {
-  archivedDays,
   pageTotals,
   organicSessionTotals,
 };
