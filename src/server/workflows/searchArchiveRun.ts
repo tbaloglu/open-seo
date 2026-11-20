@@ -1,5 +1,6 @@
 import type { WorkflowStep } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
+import { DailyPulseService } from "@/server/features/daily-pulse/DailyPulseService";
 import { isPermanentArchiveError } from "@/server/features/search-archive/archiveFetch";
 import type { ArchiveFetch } from "@/server/features/search-archive/archivePlan";
 import {
@@ -154,5 +155,18 @@ export async function runSearchArchive(
     );
   } catch (error) {
     return fail(error);
+  }
+  // The archive is fresh: write the daily pulse's alerts to the project's
+  // tasks. It only reads the archive, and a failure leaves the run completed.
+  try {
+    const pulse = await pgStep(step, "pulse", undefined, () =>
+      DailyPulseService.recordAlerts(projectId),
+    );
+    console.log({ event: "daily_pulse_recorded", projectId, ...pulse });
+  } catch (error) {
+    console.error(
+      `[search-archive] run ${runId}: daily pulse failed: ${describeError(error)}`,
+      error,
+    );
   }
 }

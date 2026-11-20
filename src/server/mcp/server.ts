@@ -45,6 +45,7 @@ import { getRankHistoryTool } from "@/server/mcp/tools/get-rank-history";
 import { getKeywordGapTool } from "@/server/mcp/tools/get-keyword-gap";
 import { getSerpChangesTool } from "@/server/mcp/tools/get-serp-changes";
 import { getSerpHistoryTool } from "@/server/mcp/tools/get-serp-history";
+import { getDailyPulseTool } from "@/server/mcp/tools/daily-pulse-tools";
 import {
   listSeoTasksTool,
   saveSeoTasksTool,
@@ -366,6 +367,7 @@ export function registerOpenSeoTools(
   register(listSeoTasksTool);
   register(saveSeoTasksTool);
   register(updateSeoTaskStatusTool);
+  register(getDailyPulseTool);
 }
 
 export function createOpenSeoMcpServer(

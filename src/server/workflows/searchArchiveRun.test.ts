@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   fetchPeriod: vi.fn(),
   recordProgress: vi.fn(),
   finishRun: vi.fn(),
+  recordAlerts: vi.fn(),
 }));
 
 vi.mock("cloudflare:workers", () => ({ env: {} }));
@@ -21,6 +22,9 @@ vi.mock("cloudflare:workflows", () => ({
 vi.mock("@/db", () => ({ withPgClient: (fn: () => unknown) => fn() }));
 vi.mock("@/server/features/search-archive/SearchArchiveService", () => ({
   SearchArchiveService: mocks,
+}));
+vi.mock("@/server/features/daily-pulse/DailyPulseService", () => ({
+  DailyPulseService: { recordAlerts: mocks.recordAlerts },
 }));
 
 const payload = {
@@ -86,6 +90,7 @@ beforeEach(() => {
     notes: [],
   });
   mocks.fetchPeriod.mockResolvedValue({ rows: 5, pauseSeconds: 0 });
+  mocks.recordAlerts.mockResolvedValue({ alerts: 0 });
 });
 
 describe("search archive run", () => {
@@ -102,6 +107,7 @@ describe("search archive run", () => {
       "gsc_site-2026-01",
       "gsc_site-2026-02",
       "finish",
+      "pulse",
     ]);
     expect(second.names).toEqual(first.names);
     expect(mocks.finishRun).toHaveBeenLastCalledWith("project", "run", {
@@ -109,6 +115,20 @@ describe("search archive run", () => {
       rowsWritten: 10,
       note: null,
     });
+  });
+
+  it("keeps a completed run completed when the daily pulse fails", async () => {
+    mocks.recordAlerts.mockRejectedValue(new Error("pulse broke"));
+    const engine = engineStep();
+    await runSearchArchive(payload, engine.step);
+
+    expect(mocks.recordAlerts).toHaveBeenCalledWith("project");
+    expect(mocks.finishRun).toHaveBeenCalledTimes(1);
+    expect(mocks.finishRun).toHaveBeenLastCalledWith(
+      "project",
+      "run",
+      expect.objectContaining({ ok: true }),
+    );
   });
 
   it("retries a transient failure and continues", async () => {

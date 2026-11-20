@@ -214,7 +214,7 @@ async function recordProgress(
 
 /** The latest run and what the archive holds, per source. */
 async function getStatus(projectId: string) {
-  const [latest, coverage, gsc, ga4] = await Promise.all([
+  const [latest, scanned, gsc, ga4] = await Promise.all([
     SearchArchiveRepository.getRun(projectId),
     SearchArchiveRepository.coverage(projectId),
     GscConnectionRepository.getByProjectId(projectId),
@@ -223,6 +223,18 @@ async function getStatus(projectId: string) {
   // A run whose workflow died would otherwise read "running" forever and
   // keep the archive button locked.
   const run = latest && (await settleDeadRun(projectId, latest));
+  // A scanned month can be empty (the site had no data yet), so each source
+  // also says which dates actually hold rows; null when none do. For
+  // gsc_query_page they are months (YYYY-MM).
+  const coverage = await Promise.all(
+    scanned.map(async (row) => {
+      const data = await SearchArchiveReadRepository.dataRange(
+        projectId,
+        row.source,
+      );
+      return { ...row, firstDataDate: data.first, lastDataDate: data.last };
+    }),
+  );
   return {
     run,
     coverage,

@@ -192,7 +192,8 @@ describe("get_keyword_gap", () => {
     expect(result.structuredContent).toMatchObject({
       counts: { competitorTotal: 1, competitorKeywordsWithinMaxRank: 4_200 },
     });
-    expect(result.content[0].text).toContain(
+    const [first] = result.content;
+    expect(first.type === "text" && first.text).toContain(
       "read 1 of the 4200 Labs has at that rank",
     );
   });

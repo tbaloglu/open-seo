@@ -291,69 +291,9 @@ async function recordPeriod(row: typeof searchArchivePeriods.$inferInsert) {
     });
 }
 
-type DataRange = { first: string | null; last: string | null };
-
-const firstRow = ([row]: DataRange[]): DataRange => ({
-  first: row?.first ?? null,
-  last: row?.last ?? null,
-});
-
-/** The first and last date (month for gsc_query_page) holding rows. */
-async function dataRange(
-  projectId: string,
-  source: ArchiveSource,
-): Promise<DataRange> {
-  switch (source) {
-    case "gsc_site":
-      return firstRow(
-        await db
-          .select({ first: min(gscDailySite.date), last: max(gscDailySite.date) })
-          .from(gscDailySite)
-          .where(eq(gscDailySite.projectId, projectId)),
-      );
-    case "gsc_page":
-      return firstRow(
-        await db
-          .select({ first: min(gscDailyPage.date), last: max(gscDailyPage.date) })
-          .from(gscDailyPage)
-          .where(eq(gscDailyPage.projectId, projectId)),
-      );
-    case "gsc_query_page":
-      return firstRow(
-        await db
-          .select({
-            first: min(gscMonthlyQueryPage.month),
-            last: max(gscMonthlyQueryPage.month),
-          })
-          .from(gscMonthlyQueryPage)
-          .where(eq(gscMonthlyQueryPage.projectId, projectId)),
-      );
-    case "ga4_site":
-      return firstRow(
-        await db
-          .select({ first: min(ga4DailySite.date), last: max(ga4DailySite.date) })
-          .from(ga4DailySite)
-          .where(eq(ga4DailySite.projectId, projectId)),
-      );
-    case "ga4_page":
-      return firstRow(
-        await db
-          .select({ first: min(ga4DailyPage.date), last: max(ga4DailyPage.date) })
-          .from(ga4DailyPage)
-          .where(eq(ga4DailyPage.projectId, projectId)),
-      );
-  }
-}
-
-/**
- * Per source: the months scanned (`firstMonth` → `lastDate`), the last fetch,
- * and the dates that actually hold rows. A scanned month can be empty (the
- * site had no data yet), so `firstDataDate`/`lastDataDate` say what the
- * archive really has; null when it has nothing. For gsc_query_page they are
- * months (YYYY-MM).
- */
+/** Per source: the archived months' range and the last fetch. */
 async function coverage(projectId: string) {
-  const scanned = await db
+  return db
     .select({
       source: searchArchivePeriods.source,
       firstMonth: min(searchArchivePeriods.month),
@@ -363,12 +303,6 @@ async function coverage(projectId: string) {
     .from(searchArchivePeriods)
     .where(eq(searchArchivePeriods.projectId, projectId))
     .groupBy(searchArchivePeriods.source);
-  return Promise.all(
-    scanned.map(async (row) => {
-      const data = await dataRange(projectId, row.source);
-      return { ...row, firstDataDate: data.first, lastDataDate: data.last };
-    }),
-  );
 }
 
 async function getRun(projectId: string) {
