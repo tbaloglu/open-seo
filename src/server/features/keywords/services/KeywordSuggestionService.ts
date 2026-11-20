@@ -71,7 +71,9 @@ async function listSearchConsoleSuggestions(projectId: string) {
   }
 }
 
-async function getSuggestions(project: Pick<EnsuredProject, "id" | "domain">) {
+async function getSuggestions(
+  project: Pick<EnsuredProject, "id" | "domain" | "languageCode">,
+) {
   const [searchConsoleSuggestions, topics] = await Promise.all([
     listSearchConsoleSuggestions(project.id),
     AiVisibilityRepository.listResearchKeywords(project.id),
@@ -88,7 +90,7 @@ async function getSuggestions(project: Pick<EnsuredProject, "id" | "domain">) {
     // keywords in Recent searches and the results.
     .map((suggestion) => ({
       ...suggestion,
-      keyword: normalizeKeyword(suggestion.keyword),
+      keyword: normalizeKeyword(suggestion.keyword, project.languageCode),
     }))
     .filter(({ keyword }) => {
       if (suggested.has(keyword)) return false;

@@ -14,7 +14,7 @@ describe("mapAdsKeywordItems", () => {
       { keyword: "Northern Lights Tour", search_volume: 320 },
       { keyword: undefined },
     ];
-    const rows = mapAdsKeywordItems(items);
+    const rows = mapAdsKeywordItems(items, "en");
 
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({

@@ -157,7 +157,10 @@ async function fetchAutoRows(
     input.resultLimit,
   );
 
-  if (countNonSeedKeywords(blended, seedKeyword) >= MIN_NON_SEED_FOR_AUTO) {
+  if (
+    countNonSeedKeywords(blended, seedKeyword, input.languageCode) >=
+    MIN_NON_SEED_FOR_AUTO
+  ) {
     return { rows: blended, source: "blended", usedFallback: false };
   }
 
@@ -308,7 +311,11 @@ export async function research(
   creditFeature?: CreditFeature,
 ): Promise<ResearchResult> {
   const uniqueKeywords = [
-    ...new Set(input.keywords.map(normalizeKeyword)),
+    ...new Set(
+      input.keywords.map((keyword) =>
+        normalizeKeyword(keyword, input.languageCode),
+      ),
+    ),
   ].filter((keyword) => keyword.length > 0);
 
   if (uniqueKeywords.length === 0) {

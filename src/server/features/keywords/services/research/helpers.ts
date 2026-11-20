@@ -1,9 +1,11 @@
+import { lowercaseKeyword } from "@/shared/text-match";
 import type { KeywordIntent, KeywordResearchRow } from "@/types/keywords";
 
 export type EnrichedKeyword = KeywordResearchRow;
 
-export function normalizeKeyword(input: string): string {
-  return input.trim().toLowerCase();
+/** Trimmed and lower-cased in the search language ("tr": İstanbul → istanbul). */
+export function normalizeKeyword(input: string, languageCode: string): string {
+  return lowercaseKeyword(input.trim(), languageCode);
 }
 
 /**

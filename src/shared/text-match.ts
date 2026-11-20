@@ -28,3 +28,24 @@ export function foldedTermKey(term: string) {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+/** Turkish or Azerbaijani, the languages that pair I with ı and İ with i. */
+export function isTurkicLanguage(languageCode: string) {
+  return /^(tr|az)\b/i.test(languageCode);
+}
+
+/**
+ * A keyword lower-cased the way its language writes it. Turkish and
+ * Azerbaijani pair I with ı and İ with i, so "KIRMIZI" is "kırmızı" there and
+ * "kirmizi" elsewhere. In every language "İ" becomes a plain "i": default
+ * lower-casing gives i plus a combining dot (U+0307), which looks the same
+ * but never equals "i".
+ */
+export function lowercaseKeyword(text: string, languageCode: string) {
+  const lower = isTurkicLanguage(languageCode)
+    ? // Turkish and Azerbaijani share the dotted/dotless i rules; a fixed
+      // tag also avoids a RangeError on a malformed language code.
+      text.toLocaleLowerCase("tr")
+    : text.toLowerCase();
+  return lower.normalize("NFC").replace(/i\u0307/g, "i");
+}

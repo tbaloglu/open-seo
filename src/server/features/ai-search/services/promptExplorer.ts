@@ -20,6 +20,7 @@ import {
   supportsWebSearchCountry,
 } from "@/shared/prompt-search-countries";
 import { safeHostname, safeHttpUrl } from "@/shared/safe-url";
+import { foldedTermKey, foldedTermSource } from "@/shared/text-match";
 import {
   promptExplorerModelResultSchema,
   type PromptExplorerCitation,
@@ -299,7 +300,7 @@ function computeBrandMentioned(
 ): boolean | null {
   if (!highlightBrand) return null;
   if (citations.some((c) => c.matchedBrand)) return true;
-  return mentionRegex(highlightBrand).test(text);
+  return mentionRegex(highlightBrand).test(text.normalize("NFD"));
 }
 
 function matchesBrand(
@@ -308,26 +309,34 @@ function matchesBrand(
   highlightBrand: string | null,
 ): boolean {
   if (!highlightBrand) return false;
-  const needle = highlightBrand.toLowerCase();
-  const haystack = `${url} ${title ?? ""}`.toLowerCase();
-  return haystack.includes(needle);
+  // Folded so Turkish i-letters match: "İşbank" finds "işbank".
+  return foldedTermKey(`${url} ${title ?? ""}`).includes(
+    foldedTermKey(highlightBrand),
+  );
 }
 
-function mentionRegex(brand: string): RegExp {
-  // Case-insensitive match on the brand string with word-boundary guards only
-  // on sides that end in a word char — otherwise \b fails for brands like
-  // "C++" or "AT&T" where the terminal char is non-word. When a boundary char
-  // is non-word we guard with a negative lookaround against that same char so
-  // "C++" doesn't match "C+++".
-  const escaped = brand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const firstEscaped = brand[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const lastEscaped = brand[brand.length - 1].replace(
-    /[.*+?^${}()|[\]\\]/g,
-    "\\$&",
-  );
-  const leading = /^\w/.test(brand) ? "\\b" : `(?<!${firstEscaped})`;
-  const trailing = /\w$/.test(brand) ? "\\b" : `(?!${lastEscaped})`;
-  return new RegExp(`${leading}${escaped}${trailing}`, "i");
+const escapeRegExpChar = (char: string) =>
+  char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const isWordChar = (char: string) => /^[\p{L}\p{M}\p{N}_]$/u.test(char);
+
+function mentionRegex(rawBrand: string): RegExp {
+  // Case-insensitive match on the brand string, with Turkish i-letters folded
+  // (run it on NFD text), and boundary guards only on sides that end in a
+  // letter, mark or digit — a boundary fails for brands like "C++" or "AT&T"
+  // where the terminal char is not one. There we guard with a negative
+  // lookaround against that same char so "C++" doesn't match "C+++".
+  const brand = rawBrand.normalize("NFC");
+  const chars = Array.from(brand);
+  const wordChar = "[\\p{L}\\p{M}\\p{N}_]";
+  const first = chars[0];
+  const last = chars[chars.length - 1];
+  const leading = isWordChar(first)
+    ? `(?<!${wordChar})`
+    : `(?<!${escapeRegExpChar(first)})`;
+  const trailing = isWordChar(last)
+    ? `(?!${wordChar})`
+    : `(?!${escapeRegExpChar(last)})`;
+  return new RegExp(`${leading}${foldedTermSource(brand)}${trailing}`, "iu");
 }
 
 function normalizePromptForCache(prompt: string): string {

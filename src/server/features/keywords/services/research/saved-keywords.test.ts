@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   saveKeywordsToProject: vi.fn(),
   countSavedKeywordsForOrganization: vi.fn(),
   listSavedKeywordRowsByKeywords: vi.fn(),
+  listKeywordMetrics: vi.fn(),
 }));
 const isHosted = vi.hoisted(() => vi.fn());
 
@@ -33,6 +34,7 @@ const savedKeywordRow = {
 
 beforeEach(() => {
   isHosted.mockResolvedValue(false);
+  mocks.listSavedKeywordRowsByKeywords.mockResolvedValue([]);
 });
 
 describe("saved keyword service", () => {

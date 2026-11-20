@@ -6,6 +6,7 @@ import {
 import type { KeywordOverviewItem } from "@/server/lib/dataforseo/labs";
 import type { CreditFeature } from "@/shared/billing-credit-features";
 import { getKeywordDataProvider } from "@/shared/keyword-locations";
+import { lowercaseKeyword } from "@/shared/text-match";
 import type { MonthlySearch } from "@/types/keywords";
 
 type DataforseoClient = ReturnType<typeof createDataforseoClient>;
@@ -133,6 +134,10 @@ export async function fetchKeywordMetricsForList(
   const useGoogleAds =
     getKeywordDataProvider(params.locationCode) === "google_ads";
   const rows: KeywordMetricRow[] = [];
+  // Echoed keywords come back lower-cased; match them in the request's
+  // language so Turkish "İstanbul" and "istanbul" are one keyword.
+  const lower = (keyword: string) =>
+    lowercaseKeyword(keyword, params.languageCode);
 
   for (let i = 0; i < params.keywords.length; i += KEYWORD_METRICS_BATCH_SIZE) {
     const keywords = params.keywords.slice(i, i + KEYWORD_METRICS_BATCH_SIZE);
@@ -148,7 +153,7 @@ export async function fetchKeywordMetricsForList(
       const covered = new Set<string>();
       for (const item of items) {
         if (!item.keyword) continue;
-        covered.add(item.keyword.toLowerCase());
+        covered.add(lower(item.keyword));
         rows.push(normalizeAdsKeyword(item, item.keyword));
       }
       // A local request must overwrite whatever scope the stored metrics
@@ -160,7 +165,7 @@ export async function fetchKeywordMetricsForList(
         ...keywords
           .filter(
             (keyword) =>
-              !covered.has(keyword.toLowerCase()) &&
+              !covered.has(lower(keyword)) &&
               (params.locationName || !isAdsKeyword(keyword)),
           )
           .map(nullMetricRow),
@@ -182,7 +187,9 @@ export async function fetchKeywordMetricsForList(
           creditFeature: params.creditFeature,
         }),
       ]);
-      rows.push(...mergeLocalAndNationalRows(keywords, adsItems, labsItems));
+      rows.push(
+        ...mergeLocalAndNationalRows(keywords, adsItems, labsItems, lower),
+      );
     } else {
       const items = await client.labs.keywordOverview({
         keywords,
@@ -218,20 +225,21 @@ function mergeLocalAndNationalRows(
   keywords: string[],
   adsItems: AdsKeywordItem[],
   labsItems: KeywordOverviewItem[],
+  lower: (keyword: string) => string,
 ): KeywordMetricRow[] {
   const labsByKeyword = new Map(
     labsItems
       .filter((item) => item.keyword)
-      .map((item) => [item.keyword!.toLowerCase(), item]),
+      .map((item) => [lower(item.keyword!), item]),
   );
   const rows: KeywordMetricRow[] = [];
   const covered = new Set<string>();
 
   for (const item of adsItems) {
     if (!item.keyword) continue;
-    covered.add(item.keyword.toLowerCase());
+    covered.add(lower(item.keyword));
     const row = normalizeAdsKeyword(item, item.keyword);
-    const labs = labsByKeyword.get(item.keyword.toLowerCase());
+    const labs = labsByKeyword.get(lower(item.keyword));
     row.keywordDifficulty =
       labs?.keyword_properties?.keyword_difficulty ?? null;
     row.intent = labs?.search_intent_info?.main_intent ?? null;
@@ -244,8 +252,8 @@ function mergeLocalAndNationalRows(
   // Every keyword gets a row, so a refresh clears stale stored metrics even
   // when neither source returned it (e.g. text Google Ads rejects).
   for (const keyword of keywords) {
-    if (covered.has(keyword.toLowerCase())) continue;
-    const labs = labsByKeyword.get(keyword.toLowerCase());
+    if (covered.has(lower(keyword))) continue;
+    const labs = labsByKeyword.get(lower(keyword));
     rows.push({
       ...nullMetricRow(keyword),
       keywordDifficulty: labs?.keyword_properties?.keyword_difficulty ?? null,

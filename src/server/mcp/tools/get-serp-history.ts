@@ -12,7 +12,18 @@ const inputSchema = {
     .string()
     .trim()
     .min(1)
-    .describe("A keyword a rank tracker in this project tracks."),
+    .optional()
+    .describe(
+      "A keyword a rank tracker in this project tracks. Pass this or trackingKeywordId.",
+    ),
+  trackingKeywordId: z
+    .string()
+    .trim()
+    .uuid()
+    .optional()
+    .describe(
+      'Tracked keyword ID from get_rank_tracker. Picks the exact keyword, e.g. when a match-case tracker tracks both "Turşu" and "turşu".',
+    ),
   trackerId: z
     .string()
     .uuid()
@@ -99,6 +110,7 @@ export const getSerpHistoryTool = {
         projectDefaultDevice: context.project.defaultDevice,
         trackerId: args.trackerId,
         keyword: args.keyword,
+        trackingKeywordId: args.trackingKeywordId,
         device: args.device,
         runs: args.runs ?? 6,
       });

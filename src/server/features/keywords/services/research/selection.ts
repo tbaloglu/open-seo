@@ -1,3 +1,4 @@
+import { lowercaseKeyword } from "@/shared/text-match";
 import type { EnrichedKeyword } from "./helpers";
 
 export type KeywordSource = "related" | "suggestions" | "ideas";
@@ -14,7 +15,8 @@ export const MIN_NON_SEED_FOR_AUTO = 5;
 export function countNonSeedKeywords(
   rows: EnrichedKeyword[],
   seedKeyword: string,
+  languageCode: string,
 ): number {
-  const normalizedSeed = seedKeyword.trim().toLowerCase();
+  const normalizedSeed = lowercaseKeyword(seedKeyword.trim(), languageCode);
   return rows.filter((row) => row.keyword !== normalizedSeed).length;
 }

@@ -1,3 +1,8 @@
+import { lowercaseKeyword } from "@/shared/text-match";
+import {
+  legacyTurkicLowercase,
+  writtenBeforeLegacyCutoff,
+} from "@/server/lib/legacy-keyword-text";
 import { RankTrackingRepository } from "@/server/features/rank-tracking/repositories/RankTrackingRepository";
 import { AppError } from "@/server/lib/errors";
 import { SerpHistoryRepository } from "../repositories/SerpHistoryRepository";
@@ -23,6 +28,13 @@ async function findKeywordTracker(input: {
   keyword?: string;
   trackingKeywordId?: string;
 }) {
+  const text = input.keyword?.trim() ?? "";
+  if (!input.trackingKeywordId && !text) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      "Pass keyword or trackingKeywordId.",
+    );
+  }
   const configs = input.trackerId
     ? [await getValidatedConfig(input.trackerId, input.projectId)]
     : await RankTrackingRepository.getConfigsForProject(input.projectId);
@@ -32,16 +44,25 @@ async function findKeywordTracker(input: {
         const keywords = await RankTrackingRepository.getKeywordsForConfig(
           config.id,
         );
-        // In the tracker's language, so "TURŞU" finds "turşu" in Turkish.
-        const lower = (text: string) =>
-          text.trim().toLocaleLowerCase(config.languageCode);
-        const wanted = lower(input.keyword ?? "");
-        // By id when known: a match-case tracker can track "Turşu" and "turşu".
-        const keyword = keywords.find((row) =>
-          input.trackingKeywordId
-            ? row.id === input.trackingKeywordId
-            : lower(row.keyword) === wanted,
-        );
+        // By id when known: a match-case tracker can track "Turşu" and
+        // "turşu". Otherwise the exact text, then the text lower-cased in the
+        // tracker's language ("TURŞU" finds "turşu", "İstanbul" finds an
+        // older "i\u0307stanbul"), then what plain toLowerCase() stored for
+        // it in Turkish ("isparta" for "Isparta") on an old row.
+        const lower = (value: string) =>
+          lowercaseKeyword(value, config.languageCode);
+        const legacy = legacyTurkicLowercase(text, config.languageCode);
+        const keyword = input.trackingKeywordId
+          ? keywords.find((row) => row.id === input.trackingKeywordId)
+          : (keywords.find((row) => row.keyword === text) ??
+            keywords.find((row) => lower(row.keyword) === lower(text)) ??
+            keywords.find(
+              (row) =>
+                legacy !== null &&
+                row.keyword === legacy &&
+                !row.matchCase &&
+                writtenBeforeLegacyCutoff(row.createdAt),
+            ));
         return keyword ? [{ config, keyword }] : [];
       }),
     )

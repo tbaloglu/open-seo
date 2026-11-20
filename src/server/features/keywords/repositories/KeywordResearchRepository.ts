@@ -18,6 +18,8 @@ import {
   savedKeywordTagAssignments,
   savedKeywords,
 } from "@/db/schema";
+import { lowercaseKeyword } from "@/shared/text-match";
+import { KeywordMetricsQueries } from "./KeywordMetricsQueries";
 import {
   SavedKeywordTagsRepository,
   type SavedKeywordTagRecord,
@@ -70,8 +72,10 @@ async function upsertKeywordMetric(params: {
   keywordDifficulty: number | null;
   intent: string | null;
   monthlySearchesJson: string;
+  /** When the numbers were fetched, if not now (a copy of older metrics). */
+  fetchedAt?: string;
 }) {
-  const fetchedAt = new Date().toISOString();
+  const fetchedAt = params.fetchedAt ?? new Date().toISOString();
 
   await db
     .insert(keywordMetrics)
@@ -145,6 +149,16 @@ function escapeLike(value: string) {
   return value.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
+// Text filters read every i-letter as "i": Turkish writes "ısparta" where
+// other languages write "isparta", and rows saved before language-aware
+// lowercasing can hold "i\u0307" (i + U+0307). Both constants are fixed, so they go
+// in as literals and cost no bound parameters.
+const foldedSavedKeyword = sql`replace(replace(lower(${savedKeywords.keyword}), ${sql.raw("'ı'")}, 'i'), ${sql.raw("'\u0307'")}, '')`;
+
+function foldedContainsPattern(term: string) {
+  return `%${escapeLike(lowercaseKeyword(term, "en").replace(/ı/g, "i"))}%`;
+}
+
 function buildSavedKeywordWhere(params: {
   projectId: string;
   search?: string;
@@ -162,21 +176,21 @@ function buildSavedKeywordWhere(params: {
   const search = params.search?.trim();
   if (search) {
     clauses.push(
-      sql`lower(${savedKeywords.keyword}) like ${`%${escapeLike(search.toLocaleLowerCase())}%`} escape '\\'`,
+      sql`${foldedSavedKeyword} like ${foldedContainsPattern(search)} escape '\\'`,
     );
   }
   for (const term of params.includeTerms ?? []) {
     const trimmed = term.trim();
     if (!trimmed) continue;
     clauses.push(
-      sql`lower(${savedKeywords.keyword}) like ${`%${escapeLike(trimmed.toLocaleLowerCase())}%`} escape '\\'`,
+      sql`${foldedSavedKeyword} like ${foldedContainsPattern(trimmed)} escape '\\'`,
     );
   }
   for (const term of params.excludeTerms ?? []) {
     const trimmed = term.trim();
     if (!trimmed) continue;
     clauses.push(
-      sql`lower(${savedKeywords.keyword}) not like ${`%${escapeLike(trimmed.toLocaleLowerCase())}%`} escape '\\'`,
+      sql`${foldedSavedKeyword} not like ${foldedContainsPattern(trimmed)} escape '\\'`,
     );
   }
   if (params.minVolume != null) {
@@ -380,6 +394,7 @@ export const KeywordResearchRepository = {
   saveKeywordsToProject,
   countSavedKeywordsForOrganization,
   listSavedKeywordRowsByKeywords,
+  listKeywordMetrics: KeywordMetricsQueries.listKeywordMetrics,
   listSavedKeywordsByProject,
   addTagsToSavedKeywords: SavedKeywordTagsRepository.addTagsToSavedKeywords,
   replaceTagsForSavedKeywords:

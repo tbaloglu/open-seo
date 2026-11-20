@@ -1,4 +1,5 @@
 import { parseTerms } from "@/client/features/keywords/utils";
+import { foldedTermKey } from "@/shared/text-match";
 import type { BrandLookupResult } from "@/types/schemas/ai-search";
 import type {
   QueriesFilterValues,
@@ -23,14 +24,13 @@ function passesTextFilter(
   includeTerms: string[],
   excludeTerms: string[],
 ): boolean {
-  const lower = haystack.toLowerCase();
-  if (
-    includeTerms.length > 0 &&
-    !includeTerms.some((term) => lower.includes(term))
-  ) {
+  // Folded so Turkish i-letters match: "İstanbul" finds "istanbul".
+  const folded = foldedTermKey(haystack);
+  const contains = (term: string) => folded.includes(foldedTermKey(term));
+  if (includeTerms.length > 0 && !includeTerms.some(contains)) {
     return false;
   }
-  if (excludeTerms.some((term) => lower.includes(term))) {
+  if (excludeTerms.some(contains)) {
     return false;
   }
   return true;

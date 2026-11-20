@@ -101,7 +101,7 @@ async function getSerpLiveAnalysis(
   },
   billingCustomer: BillingCustomerContext,
 ): Promise<SerpAnalysisResult> {
-  const keyword = normalizeKeyword(input.keyword);
+  const keyword = normalizeKeyword(input.keyword, input.languageCode);
   const { depth, device } = input;
   if (input.locationName) {
     await assertLocalResearchLocation(input.locationCode, input.locationName);

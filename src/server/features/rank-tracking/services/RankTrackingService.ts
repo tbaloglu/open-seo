@@ -1,17 +1,9 @@
 import { env } from "cloudflare:workers";
 import { sortBy } from "remeda";
-import {
-  customerHasPaidPlan,
-  type BillingCustomerContext,
-} from "@/server/billing/subscription";
-import {
-  createDataforseoClient,
-  fetchKeywordMetricsForList,
-} from "@/server/lib/dataforseo";
+import type { BillingCustomerContext } from "@/server/billing/subscription";
 import { RankTrackingRepository } from "@/server/features/rank-tracking/repositories/RankTrackingRepository";
 import { assertSerpLocationNameAccepted } from "@/server/lib/dataforseo/serp-location-validate";
 import { AppError } from "@/server/lib/errors";
-import { isHostedServerAuthMode } from "@/server/lib/runtime-env";
 import type {
   RankCheckScheduleTime,
   RankTrackingConfig,
@@ -28,14 +20,13 @@ import {
   rankCheckCostApprovalError,
 } from "@/shared/rank-tracking";
 import { resolveNextCheckAt } from "./configSchedule";
-import {
-  getIsoCountryCode,
-  resolveKeywordDataLanguage,
-  resolveMarket,
-} from "@/shared/keyword-locations";
+import { getIsoCountryCode, resolveMarket } from "@/shared/keyword-locations";
 import { getLatestResults } from "./rankTrackingResults";
 import { toRankTrackingTimestamp } from "@/server/features/rank-tracking/rankTrackingTimestamps";
-import { RankTrackingKeywordService } from "./RankTrackingKeywordService";
+import {
+  RankTrackingKeywordService,
+  requireRankCheckAccess,
+} from "./RankTrackingKeywordService";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -321,61 +312,6 @@ async function getLatestRun(configId: string, projectId: string) {
 // Keyword metrics (volume, difficulty, CPC)
 // ---------------------------------------------------------------------------
 
-async function refreshKeywordMetrics(
-  configId: string,
-  projectId: string,
-  billingCustomer: BillingCustomerContext,
-): Promise<{ updated: number }> {
-  const config = await getValidatedConfig(configId, projectId);
-  await requireRankCheckAccess(billingCustomer.organizationId);
-  const keywords = await RankTrackingRepository.getKeywordsForConfig(configId);
-  if (keywords.length === 0) return { updated: 0 };
-
-  const client = createDataforseoClient(billingCustomer);
-  const lower = (text: string) => text.toLocaleLowerCase(config.languageCode);
-  const metrics = await fetchKeywordMetricsForList(client, {
-    // The keyword-data APIs are case-insensitive and echo keywords back
-    // lowercased, so ask in lowercase. A match-case keyword can sit next to
-    // its lowercase twin; both then map to the same metrics row and the
-    // request carries no duplicates.
-    keywords: [...new Set(keywords.map((kw) => lower(kw.keyword)))],
-    locationCode: config.locationCode,
-    // Trackers can pair any SERP language with any country; the keyword-data
-    // APIs only serve the country's own languages.
-    languageCode: resolveKeywordDataLanguage(
-      config.locationCode,
-      config.languageCode,
-    ),
-    // Local configs get volume/CPC scoped to the tracked city; national
-    // numbers can overstate local demand by orders of magnitude.
-    locationName: config.locationName ?? undefined,
-    creditFeature: "rank_tracking",
-  });
-  const byKeyword = new Map(
-    metrics.map((metric) => [lower(metric.keyword), metric]),
-  );
-
-  const now = new Date().toISOString();
-  const updates = keywords
-    .map((kw) => {
-      const metric = byKeyword.get(lower(kw.keyword));
-      if (!metric) return null;
-      // Rank tracking only tracks volume / difficulty / CPC.
-      return {
-        id: kw.id,
-        searchVolume: metric.searchVolume,
-        keywordDifficulty: metric.keywordDifficulty,
-        cpc: metric.cpc,
-        metricsFetchedAt: now,
-      };
-    })
-    .filter((u): u is NonNullable<typeof u> => u !== null);
-
-  if (updates.length === 0) return { updated: 0 };
-  await RankTrackingRepository.updateKeywordMetrics(updates);
-  return { updated: updates.length };
-}
-
 // ---------------------------------------------------------------------------
 // MCP/browser read models and access policy
 // ---------------------------------------------------------------------------
@@ -428,15 +364,6 @@ async function getPositionHistory(input: {
     ),
   ]);
   return { config, device, keywords, cells };
-}
-
-async function requireRankCheckAccess(organizationId: string) {
-  if (!(await isHostedServerAuthMode())) return;
-  if (await customerHasPaidPlan(organizationId)) return;
-  throw new AppError(
-    "PAYMENT_REQUIRED",
-    "Upgrade to the paid plan to run rank checks",
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -504,7 +431,7 @@ export const RankTrackingService = {
   triggerAutoCheck,
   getLatestRun,
   estimateCost: RankTrackingKeywordService.estimateCost,
-  refreshKeywordMetrics,
+  refreshKeywordMetrics: RankTrackingKeywordService.refreshMetrics,
   getConfigs,
   getTracker,
   getPositionHistory,

@@ -5,6 +5,7 @@ import {
   fetchKeywordMetricsForList,
 } from "@/server/lib/dataforseo";
 import type { BillingCustomerContext } from "@/server/billing/subscription";
+import { lowercaseKeyword } from "@/shared/text-match";
 import type { RefreshSavedKeywordMetricsInput } from "@/types/schemas/keywords";
 
 // Cap concurrent D1 upserts per group. A project can accumulate thousands of
@@ -39,22 +40,26 @@ export async function refreshSavedKeywordMetrics(
 
   for (const groupRows of groups.values()) {
     const { locationCode, languageCode } = groupRows[0].row;
+    // Rows saved before language-aware lowercasing can hold "i\u0307stanbul" (i
+    // plus a combining dot); ask for and match them as "istanbul".
+    const lower = (keyword: string) => lowercaseKeyword(keyword, languageCode);
     const metrics = await fetchKeywordMetricsForList(client, {
-      keywords: groupRows.map((r) => r.row.keyword),
+      keywords: [...new Set(groupRows.map((r) => lower(r.row.keyword)))],
       locationCode,
       languageCode,
       creditFeature: "keyword_research",
     });
     const byKeyword = new Map(
-      metrics.map((metric) => [metric.keyword.toLowerCase(), metric]),
+      metrics.map((metric) => [lower(metric.keyword), metric]),
     );
 
     for (let i = 0; i < groupRows.length; i += REFRESH_UPSERT_BATCH_SIZE) {
       const chunk = groupRows.slice(i, i + REFRESH_UPSERT_BATCH_SIZE);
       await Promise.all(
         chunk.map((r) => {
-          const metric = byKeyword.get(r.row.keyword.toLowerCase());
+          const metric = byKeyword.get(lower(r.row.keyword));
           if (!metric) return Promise.resolve();
+          updated++;
           return KeywordResearchRepository.upsertKeywordMetric({
             projectId: input.projectId,
             keyword: r.row.keyword,
@@ -70,8 +75,6 @@ export async function refreshSavedKeywordMetrics(
         }),
       );
     }
-
-    updated += byKeyword.size;
   }
 
   return { updated };

@@ -3,6 +3,7 @@ import type { LlmCrossAggregatedItem } from "@/server/lib/dataforseoLlmSchemas";
 import type { LlmPlatform } from "@/server/lib/dataforseo";
 import type { BrandLookupResult } from "@/types/schemas/ai-search";
 import { detectTarget } from "@/shared/targetDetection";
+import { foldedTermKey } from "@/shared/text-match";
 
 export type CrossOutcome = {
   platform: LlmPlatform;
@@ -22,17 +23,18 @@ export type CompetitorGroup = {
  * wastes a paid comparison slot. Dedupe is case-insensitive: domains are
  * already lowercased by detectTarget, but keyword targets preserve case while
  * DataForSEO matches them case-insensitively, so "Nike" and "nike" would be
- * two paid groups returning the same counts.
+ * two paid groups returning the same counts. Turkish i-letters fold too
+ * ("İşbank" and "işbank"), as default lower-casing turns İ into i + U+0307.
  */
 export function resolveCompetitorGroups(
   targetValue: string,
   competitors: string[],
 ): CompetitorGroup[] {
-  const seen = new Set<string>([targetValue.toLowerCase()]);
+  const seen = new Set<string>([foldedTermKey(targetValue)]);
   const groups: CompetitorGroup[] = [];
   for (const competitor of competitors) {
     const detected = detectTarget(competitor);
-    const dedupeKey = detected.value.toLowerCase();
+    const dedupeKey = foldedTermKey(detected.value);
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
     groups.push({ label: detected.value, detected });
@@ -73,16 +75,16 @@ export function computeShareOfVoice(
 
   const requestedKeys = [targetKey, ...competitorKeys];
   const labelByKey = new Map(
-    requestedKeys.map((key) => [key.toLowerCase(), key]),
+    requestedKeys.map((key) => [foldedTermKey(key), key]),
   );
   const mentionsByKey = new Map<string, number | null>(
-    requestedKeys.map((key) => [key.toLowerCase(), null]),
+    requestedKeys.map((key) => [foldedTermKey(key), null]),
   );
 
   for (const outcome of successful) {
     for (const item of outcome.items) {
       if (item.key == null) continue;
-      const key = item.key.toLowerCase();
+      const key = foldedTermKey(item.key);
       // The provider should echo only requested aggregation keys. If it ever
       // returns extra rows, do not let them alter requested share percentages.
       if (!labelByKey.has(key)) continue;
@@ -96,7 +98,7 @@ export function computeShareOfVoice(
   }
 
   const denominator = sumNullable(Array.from(mentionsByKey.values())) ?? 0;
-  const targetLower = targetKey.toLowerCase();
+  const targetLower = foldedTermKey(targetKey);
 
   const entries = sortBy(
     Array.from(mentionsByKey.entries()).map(([key, mentions]) => ({
