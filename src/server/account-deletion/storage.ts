@@ -25,6 +25,7 @@ type StorageErasureInput = {
   activeRankWorkflowIds: string[];
   activeAiVisibilityWorkflowIds: string[];
   activeLocalRankWorkflowIds: string[];
+  activeSearchArchiveWorkflowIds: string[];
   r2Keys: string[];
   googleAccounts: {
     providerId: typeof GSC_OAUTH_PROVIDER_ID | typeof GA4_OAUTH_PROVIDER_ID;
@@ -148,6 +149,10 @@ export async function eraseAccountStorage(
     env.LOCAL_RANK_WORKFLOW,
     payload.activeLocalRankWorkflowIds,
   );
+  const searchArchiveWorkflowsTerminated = await terminateWorkflows(
+    env.SEARCH_ARCHIVE_WORKFLOW,
+    payload.activeSearchArchiveWorkflowIds,
+  );
 
   const googleRevocations: GoogleRevocationResult[] = [];
   for (const account of payload.googleAccounts) {
@@ -210,6 +215,7 @@ export async function eraseAccountStorage(
       rankTerminated: rankWorkflowsTerminated,
       aiVisibilityTerminated: aiWorkflowsTerminated,
       localRankTerminated: localRankWorkflowsTerminated,
+      searchArchiveTerminated: searchArchiveWorkflowsTerminated,
     },
     durableObjects: {
       sam: payload.samSessionIds.length,

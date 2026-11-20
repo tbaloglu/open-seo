@@ -5,6 +5,7 @@ import { GoogleConnectionCard } from "@/client/features/integrations/GoogleConne
 import { CrawlerAccessSettings } from "@/client/features/settings/CrawlerAccessSettings";
 import { EmbedSettings } from "@/client/features/embeds/EmbedSettings";
 import { IndexNowSettings } from "@/client/features/settings/IndexNowSettings";
+import { SearchArchiveSettings } from "@/client/features/settings/SearchArchiveSettings";
 
 export const Route = createFileRoute(
   "/_app/p/$projectId/settings/integrations",
@@ -36,6 +37,8 @@ function ProjectIntegrationsRoute() {
       <section id="google-analytics" className="scroll-mt-6">
         <GoogleConnectionCard provider="ga4" projectId={projectId} />
       </section>
+
+      <SearchArchiveSettings projectId={projectId} />
 
       <EmbedSettings projectId={projectId} />
 

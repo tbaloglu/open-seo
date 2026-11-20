@@ -23,6 +23,7 @@ import {
   GSC_FILTER_OPERATORS,
   GSC_MAX_ROW_LIMIT,
   GSC_SEARCH_TYPES,
+  resolveDateRange,
   type GscPerformanceInput,
 } from "@/server/features/gsc/searchAnalytics";
 import {
@@ -296,6 +297,24 @@ export const getSearchConsolePerformanceTool = {
       );
     }
 
+    // A range wholly older than Google's 16 months would clamp to a start
+    // after its end, which Google rejects (fork: the archive may have it).
+    if (args.startDate && args.endDate && args.startDate > args.endDate) {
+      return invalidRequest(meta, "startDate must be on or before endDate.");
+    }
+    if (args.startDate && args.endDate) {
+      const { startDate: floor } = resolveDateRange({
+        startDate: args.startDate,
+        endDate: args.endDate,
+      });
+      if (floor > args.endDate) {
+        return invalidRequest(
+          meta,
+          `Google keeps Search Console data from ${floor} only, and this range ends before that. Older data: get_archived_search_performance.`,
+        );
+      }
+    }
+
     try {
       const requestedLimit = args.rowLimit ?? GSC_DEFAULT_ROW_LIMIT;
       const metricFilter = pickMetricFilter(args);
@@ -335,9 +354,15 @@ export const getSearchConsolePerformanceTool = {
       const filterText = metricFilter
         ? ` · filtered ${fetched.length} rows → ${kept.length}`
         : "";
+      // Google keeps 16 months, so an older start was clamped (fork: the
+      // project's archive may hold the rest).
+      const archiveNote =
+        args.startDate && args.startDate < result.request.startDate
+          ? `\nGoogle no longer has days before ${result.request.startDate}; the range starts there. Older data: get_archived_search_performance.`
+          : "";
       const header =
         `${result.siteUrl} · ${dimensions.join("+")} · ${result.request.startDate}→${result.request.endDate} · ` +
-        `${rows.length} row${rows.length === 1 ? "" : "s"}${filterText}${hasMore ? ` (more available — call again with startRow=${nextStartRow})` : ""}`;
+        `${rows.length} row${rows.length === 1 ? "" : "s"}${filterText}${hasMore ? ` (more available — call again with startRow=${nextStartRow})` : ""}${archiveNote}`;
       const text =
         rows.length > 0
           ? `${header}\n${formatMcpTable(rows, GSC_PERF_COLUMNS)}`

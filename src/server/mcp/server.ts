@@ -45,6 +45,16 @@ import { getRankHistoryTool } from "@/server/mcp/tools/get-rank-history";
 import { getKeywordGapTool } from "@/server/mcp/tools/get-keyword-gap";
 import { getSerpChangesTool } from "@/server/mcp/tools/get-serp-changes";
 import { getSerpHistoryTool } from "@/server/mcp/tools/get-serp-history";
+import {
+  listSeoTasksTool,
+  saveSeoTasksTool,
+  updateSeoTaskStatusTool,
+} from "@/server/mcp/tools/seo-task-tools";
+import {
+  archiveSearchDataTool,
+  getArchivedSearchPerformanceTool,
+  getSearchArchiveStatusTool,
+} from "@/server/mcp/tools/search-archive-tools";
 import { getRankTrackerTool } from "@/server/mcp/tools/get-rank-tracker";
 import { removeRankTrackingKeywordsTool } from "@/server/mcp/tools/remove-rank-tracking-keywords";
 import { pinRankTrackingKeywordsTool } from "@/server/mcp/tools/pin-rank-tracking-keywords";
@@ -322,6 +332,9 @@ export function registerOpenSeoTools(
   register(setSearchConsoleSiteTool);
   register(getSearchConsolePerformanceTool);
   register(inspectUrlsTool);
+  register(archiveSearchDataTool);
+  register(getSearchArchiveStatusTool);
+  register(getArchivedSearchPerformanceTool);
   register(submitIndexNowUrlsTool);
   register(listGoogleAnalyticsPropertiesTool);
   register(setGoogleAnalyticsPropertyTool);
@@ -350,6 +363,9 @@ export function registerOpenSeoTools(
   register(listReportTemplatesTool);
   register(saveReportTemplateTool);
   register(deleteReportTemplateTool);
+  register(listSeoTasksTool);
+  register(saveSeoTasksTool);
+  register(updateSeoTaskStatusTool);
 }
 
 export function createOpenSeoMcpServer(

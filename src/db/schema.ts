@@ -162,4 +162,13 @@ export const {
   projectEmbeds,
   serpSnapshotResults,
   serpSnapshotFeatures,
+  seoTasks,
+  seoTaskUrls,
+  gscDailySite,
+  gscDailyPage,
+  gscMonthlyQueryPage,
+  ga4DailySite,
+  ga4DailyPage,
+  searchArchivePeriods,
+  searchArchiveRuns,
 } = schema;

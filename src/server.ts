@@ -269,6 +269,7 @@ async function handleAppRequest(
 export { RankCheckWorkflow } from "./server/workflows/RankCheckWorkflow";
 export { AiVisibilityWorkflow } from "./server/workflows/AiVisibilityWorkflow";
 export { LocalRankWorkflow } from "./server/workflows/LocalRankWorkflow";
+export { SearchArchiveWorkflow } from "./server/workflows/SearchArchiveWorkflow";
 // Durable Object class for the SAM in-app agent (Agents SDK).
 export { SamChatAgent } from "./server/features/sam/SamChatAgent";
 

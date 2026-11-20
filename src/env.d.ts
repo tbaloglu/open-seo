@@ -121,6 +121,12 @@ declare namespace Cloudflare {
         import("./server").LocalRankWorkflow["run"]
       >[0]["payload"]
     >;
+    // Payload: ArchiveJobPayload in search-archive/SearchArchiveService.ts.
+    SEARCH_ARCHIVE_WORKFLOW: Workflow<{
+      projectId: string;
+      runId: string;
+      mode: "backfill" | "incremental";
+    }>;
     AI_VISIBILITY_WORKFLOW: Workflow<
       (
         | { runId: string }
