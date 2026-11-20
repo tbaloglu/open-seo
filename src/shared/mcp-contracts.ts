@@ -183,12 +183,21 @@ export const keywordGapSchema = z.looseObject({
   maxRank: z.number(),
   positionThreshold: z.number(),
   counts: z.looseObject({
-    // Distinct competitor keywords at maxRank or better that were read.
+    // Distinct competitor keywords at maxRank or better that were read and
+    // compared; noImpressions + belowThreshold + ranking add up to it.
     competitorTotal: z.number(),
-    // All of the competitor's keywords at maxRank or better in DataForSEO Labs.
-    competitorTotalInLabs: z.number().nullable(),
-    // Competitor keywords the site also has Search Console impressions for.
-    matched: z.number(),
+    // How many keywords Labs has for the competitor at maxRank or better
+    // (Labs' total_count for the filtered request), of which at most
+    // competitorLimit are read. Not the competitor's unfiltered total.
+    competitorKeywordsWithinMaxRank: z.number().nullable(),
+    // Compared keywords the site has no Search Console impressions for.
+    noImpressions: z.number(),
+    // Compared keywords the site has impressions for, at a position worse
+    // than positionThreshold.
+    belowThreshold: z.number(),
+    // Compared keywords the site ranks for at positionThreshold or better.
+    ranking: z.number(),
+    // noImpressions + belowThreshold.
     gap: z.number(),
     returned: z.number(),
   }),

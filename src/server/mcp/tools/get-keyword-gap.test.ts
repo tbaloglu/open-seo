@@ -120,7 +120,13 @@ describe("get_keyword_gap", () => {
 
     expect(result.structuredContent).toMatchObject({
       ok: true,
-      counts: { competitorTotal: 3, matched: 2, gap: 2 },
+      counts: {
+        competitorTotal: 3,
+        ranking: 1,
+        belowThreshold: 1,
+        noImpressions: 1,
+        gap: 2,
+      },
       keywords: [
         { keyword: "şeker turşusu", ourPosition: null, ourImpressions: null },
         { keyword: "ISPARTA  gül", ourPosition: 35, ourImpressions: 100 },
@@ -143,7 +149,7 @@ describe("get_keyword_gap", () => {
     const result = await run();
 
     expect(result.structuredContent).toMatchObject({
-      counts: { matched: 1, gap: 0 },
+      counts: { ranking: 1, gap: 0 },
     });
   });
 
@@ -156,7 +162,7 @@ describe("get_keyword_gap", () => {
     const result = await run();
 
     expect(result.structuredContent).toMatchObject({
-      counts: { matched: 1, gap: 1 },
+      counts: { belowThreshold: 1, gap: 1 },
       keywords: [{ ourPosition: 32.5, ourImpressions: 400, ourClicks: 4 }],
     });
   });
@@ -170,9 +176,25 @@ describe("get_keyword_gap", () => {
     const result = await run();
 
     expect(result.structuredContent).toMatchObject({
-      counts: { matched: 2, gap: 1 },
+      counts: { ranking: 1, belowThreshold: 1, noImpressions: 0, gap: 1 },
       keywords: [{ keyword: "biraz kotu", ourPosition: 20.1 }],
     });
+  });
+
+  it("reports Labs' filtered total separately from the rows read", async () => {
+    mocks.rankedKeywords.mockResolvedValue({
+      items: [competitorRow("turşu", 100)],
+      totalCount: 4_200,
+    });
+
+    const result = await run();
+
+    expect(result.structuredContent).toMatchObject({
+      counts: { competitorTotal: 1, competitorKeywordsWithinMaxRank: 4_200 },
+    });
+    expect(result.content[0].text).toContain(
+      "read 1 of the 4200 Labs has at that rank",
+    );
   });
 
   it("pages through Search Console on page 0's dates until a short page", async () => {
@@ -202,7 +224,7 @@ describe("get_keyword_gap", () => {
       type: "web",
     });
     expect(result.structuredContent).toMatchObject({
-      counts: { matched: 1, gap: 0 },
+      counts: { ranking: 1, gap: 0 },
       searchConsoleTruncated: false,
     });
   });
