@@ -37,6 +37,10 @@ export default {
       { name: "AI_VISIBILITY_WORKFLOW", className: "AiVisibilityWorkflow" },
       { name: "LOCAL_RANK_WORKFLOW", className: "LocalRankWorkflow" },
       {
+        name: "SEARCH_ARCHIVE_WORKFLOW",
+        className: "SearchArchiveWorkflow",
+      },
+      {
         name: "SITE_AUDIT_WORKFLOW",
         className: "SiteAuditWorkflow",
         worker: "audit",

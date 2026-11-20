@@ -8,6 +8,7 @@ import {
   Globe,
   LayoutDashboard,
   Link2,
+  ListChecks,
   MapPin,
   MessageSquare,
   Search,
@@ -87,6 +88,11 @@ const projectNavItems = [
     icon: FileText,
   },
   {
+    to: "/p/$projectId/tasks" as const,
+    label: "Tasks",
+    icon: ListChecks,
+  },
+  {
     to: "/p/$projectId/context" as const,
     label: "Context",
     icon: Brain,
@@ -160,6 +166,7 @@ export function getProjectNavGroups(projectId: string) {
       label: "AI Tools",
       items: [
         byPath("/p/$projectId/reports"),
+        byPath("/p/$projectId/tasks"),
         byPath("/p/$projectId/context"),
         aiNavItem,
       ],

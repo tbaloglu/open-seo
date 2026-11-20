@@ -64,6 +64,9 @@ export type GscPerformanceInput = {
   startRow?: number;
   type?: GscSearchType;
   dataState?: "all" | "final";
+  /** Send explicit dates as given, without the 16-month clamp. The search
+   *  archive (fork) applies its own Pacific Time floor. */
+  exactDates?: boolean;
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -116,11 +119,17 @@ function sixteenMonthFloor(today: Date): string {
 /** Resolve a convenience `dateRange` or explicit start/end into GSC dates.
  *  `today` is injectable for deterministic tests. */
 export function resolveDateRange(
-  input: Pick<GscPerformanceInput, "dateRange" | "startDate" | "endDate">,
+  input: Pick<
+    GscPerformanceInput,
+    "dateRange" | "startDate" | "endDate" | "exactDates"
+  >,
   today: Date = new Date(),
 ): { startDate: string; endDate: string } {
   const floor = sixteenMonthFloor(today);
 
+  if (input.startDate && input.endDate && input.exactDates) {
+    return { startDate: input.startDate, endDate: input.endDate };
+  }
   if (input.startDate && input.endDate) {
     // Clamp the start to GSC's 16-month lower bound.
     const startDate = input.startDate < floor ? floor : input.startDate;

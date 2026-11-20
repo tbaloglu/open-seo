@@ -30,6 +30,7 @@ import {
   projects,
   rankCheckRuns,
   reportTemplates,
+  searchArchiveRuns,
   reports,
   samSessions,
   session,
@@ -300,6 +301,21 @@ async function buildInventory(userId: string, organizationIds: string[]) {
     )
   ).map((row) => row.id);
 
+  // Fork: the search archive's running workflows.
+  const activeSearchArchiveWorkflowIds = (
+    await inProjects(() =>
+      db
+        .select({ id: searchArchiveRuns.runId })
+        .from(searchArchiveRuns)
+        .where(
+          and(
+            inArray(searchArchiveRuns.projectId, projectIds),
+            eq(searchArchiveRuns.status, "running"),
+          ),
+        ),
+    )
+  ).map((row) => row.id);
+
   return {
     projectIds,
     samSessionIds,
@@ -310,6 +326,7 @@ async function buildInventory(userId: string, organizationIds: string[]) {
     activeRankWorkflowIds,
     activeAiVisibilityWorkflowIds,
     activeLocalRankWorkflowIds,
+    activeSearchArchiveWorkflowIds,
   };
 }
 

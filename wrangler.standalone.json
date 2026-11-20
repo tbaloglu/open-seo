@@ -23,6 +23,11 @@
       "binding": "LOCAL_RANK_WORKFLOW",
       "name": "local-rank-workflow",
       "class_name": "LocalRankWorkflow"
+    },
+    {
+      "binding": "SEARCH_ARCHIVE_WORKFLOW",
+      "name": "search-archive-workflow",
+      "class_name": "SearchArchiveWorkflow"
     }
   ],
   "durable_objects": {
