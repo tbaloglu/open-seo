@@ -251,3 +251,15 @@ export const searchArchiveRuns = pgTable("search_archive_runs", {
   rowsWritten: integer("rows_written").notNull().default(0),
   note: text("note"),
 });
+
+export const projectTopicWords = pgTable(
+  "project_topic_words",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    word: text("word").notNull(),
+    sortOrder: integer("sort_order").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.projectId, table.word] })],
+);

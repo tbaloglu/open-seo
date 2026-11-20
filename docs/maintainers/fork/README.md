@@ -12,6 +12,8 @@ Fork'un kendi şema değişiklikleri ayrı şema dosyalarında durur (`src/db/fo
 | Postgres   | `drizzle/pg/0051_fork_serp_history.sql`                 |
 | SQLite/D1  | `drizzle/sqlite/0074_fork_seo_tasks_search_archive.sql` |
 | Postgres   | `drizzle/pg/0052_fork_seo_tasks_search_archive.sql`     |
+| SQLite/D1  | `drizzle/sqlite/0075_fork_project_topic_words.sql`      |
+| Postgres   | `drizzle/pg/0053_fork_project_topic_words.sql`          |
 
 ### Kural: uygulanmış geçiş dosyası silinmez, yeniden adlandırılmaz, yeniden üretilmez
 

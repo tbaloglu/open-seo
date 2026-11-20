@@ -8,6 +8,7 @@ import {
 } from "@/server/mcp/output-schemas";
 import { withMcpProjectAuth } from "@/server/mcp/project-auth";
 import { projectIdSchema } from "@/server/mcp/schemas";
+import { TOPIC_WORDS_RULE } from "@/shared/topic-words";
 import {
   updateProjectContextSchema,
   type ContextAuthor,
@@ -27,6 +28,8 @@ const contextOutputSchema = z
     keyPages: z.array(looseObjectOutputSchema),
     researchLog: z.array(looseObjectOutputSchema),
     reportTemplates: z.array(looseObjectOutputSchema),
+    // Optional so clients holding an older tools/list still accept responses.
+    topicWords: z.array(z.string()).optional(),
     ...optionalMetaOutputSchema,
   })
   .passthrough();
@@ -40,7 +43,7 @@ export const getProjectContextTool = {
   config: {
     title: "Get project context",
     description:
-      "Read a project's shared memory: business overview, current goal, positioning, writing preferences, custom sections, competitors, key pages, and the recent research log. Call it before SEO work to ground the work in what the user already told OpenSEO, and check the research log before buying the same research again. Uses no credits. To fill sections listed as missing, use update_project_context.",
+      "Read a project's shared memory: business overview, current goal, positioning, writing preferences, custom sections, competitors, key pages, keyword-research topic words, and the recent research log. Call it before SEO work to ground the work in what the user already told OpenSEO, and check the research log before buying the same research again. Uses no credits. To fill sections listed as missing, use update_project_context.",
     inputSchema: getInputSchema,
     outputSchema: contextOutputSchema,
     annotations: {
@@ -74,7 +77,7 @@ const updateInputSchema = {
   // The batch cap lives with the server function's schema so both entry points
   // accept exactly the same patch list.
   updates: updateProjectContextSchema.shape.updates.describe(
-    'Patch ops, applied in order. Set the name AI visibility looks for in answers with {brandName: "Acme"}, after the user confirms it; an empty string goes back to the project name. Clear a standard section with {section: "current_goal", content: ""}; delete a custom section with {deleteCustomSection: "slug"}; removeCompetitors takes domains, removeKeyPages takes URLs, and removeResearchLog takes entry IDs from the project context. Adds upsert by domain/url; research-log entries are date-stamped by the server.',
+    `Patch ops, applied in order. Set the name AI visibility looks for in answers with {brandName: "Acme"}, after the user confirms it; an empty string goes back to the project name. Clear a standard section with {section: "current_goal", content: ""}; delete a custom section with {deleteCustomSection: "slug"}; removeCompetitors takes domains, removeKeyPages takes URLs, and removeResearchLog takes entry IDs from the project context. Adds upsert by domain/url; research-log entries are date-stamped by the server. Replace the keyword-research topic words with {topicWords: ["pickle", "brine"]}; [] clears them. ${TOPIC_WORDS_RULE} Case and Turkish i/ı/İ variants count as one word.`,
   ),
 } as const;
 
@@ -89,7 +92,7 @@ export function buildUpdateProjectContextTool(author: ContextAuthor) {
     config: {
       title: "Update project context",
       description:
-        "Add, edit, or delete entries in a project's shared memory, which the app, SAM, and other agents all read. Sections are prose (~4,000 characters max), competitors and key pages are curated shortlists (100 max each), and appendResearchLog records research already bought. Confirm facts with the user before storing them. Uses no credits. Call get_project_context first to find entries to remove; for report templates, use save_report_template.",
+        "Add, edit, or delete entries in a project's shared memory, which the app, SAM, and other agents all read. Sections are prose (~4,000 characters max), competitors and key pages are curated shortlists (100 max each), appendResearchLog records research already bought, and topicWords replaces the project's keyword-research topic filter. Confirm facts with the user before storing them. Uses no credits. Call get_project_context first to find entries to remove; for report templates, use save_report_template.",
       inputSchema: updateInputSchema,
       outputSchema: contextOutputSchema,
       annotations: {

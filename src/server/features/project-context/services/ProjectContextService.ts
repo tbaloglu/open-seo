@@ -1,6 +1,7 @@
 import { runBatch } from "@/db/runBatch";
 import { ProjectContextRepository } from "@/server/features/project-context/repositories/ProjectContextRepository";
 import { resolveContextUpdates } from "@/server/features/project-context/services/contextUpdateOps";
+import { TopicWordsRepository } from "@/server/features/topic-words/repositories/TopicWordsRepository";
 import { ReportTemplateRepository } from "@/server/features/reports/repositories/ReportTemplateRepository";
 import {
   CUSTOM_SECTION_KEY_PREFIX,
@@ -64,6 +65,8 @@ type ProjectContext = {
    * agents discover them.
    */
   reportTemplates: { name: string; description: string }[];
+  /** The keyword-research topic filter, saved for the project. */
+  topicWords: string[];
 };
 
 export async function getProjectContext(
@@ -76,6 +79,7 @@ export async function getProjectContext(
     keyPages,
     researchLog,
     reportTemplates,
+    topicWords,
   ] = await Promise.all([
     ProjectContextRepository.getBrandName(projectId),
     ProjectContextRepository.listSections(projectId),
@@ -83,6 +87,7 @@ export async function getProjectContext(
     ProjectContextRepository.listKeyPages(projectId),
     ProjectContextRepository.listResearchLog(projectId, RESEARCH_LOG_LIMIT),
     ReportTemplateRepository.listTemplates(projectId),
+    TopicWordsRepository.listWords(projectId),
   ]);
 
   const stored = new Map(sectionRows.map((row) => [row.key, row]));
@@ -129,6 +134,7 @@ export async function getProjectContext(
       name: template.name,
       description: template.description,
     })),
+    topicWords,
   };
 }
 
@@ -234,6 +240,8 @@ export async function applyContextUpdates(
               dayStamp(-RESEARCH_LOG_RETENTION_DAYS),
             ),
           ];
+        case "replaceTopicWords":
+          return TopicWordsRepository.replaceWords(tx, projectId, op.words);
       }
     }),
   );
@@ -326,6 +334,12 @@ export function renderProjectContextMarkdown(context: ProjectContext): string {
         : []),
     ],
   );
+
+  // Omitted when empty, like report templates, so a project without topic
+  // words reads as it did before.
+  if (context.topicWords.length > 0) {
+    pushSection(lines, "Topic words", [context.topicWords.join(", ")]);
+  }
 
   if (context.reportTemplates.length > 0) {
     pushSection(

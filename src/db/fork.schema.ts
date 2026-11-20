@@ -317,3 +317,23 @@ export const searchArchiveRuns = sqliteTable("search_archive_runs", {
   // Sources skipped (not connected) or the failure, for the status read.
   note: text("note"),
 });
+
+// ============================================================================
+// Topic words: the keyword-research "Topic Words (any)" filter, saved per
+// project so it follows the user across browsers and agents can set it. The
+// service dedupes with Turkish-aware folding, so `word` keeps the spelling the
+// user typed first.
+// ============================================================================
+
+export const projectTopicWords = sqliteTable(
+  "project_topic_words",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    word: text("word").notNull(),
+    // Order the user listed them in, from 0.
+    sortOrder: integer("sort_order").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.projectId, table.word] })],
+);

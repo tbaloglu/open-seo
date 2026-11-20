@@ -2,6 +2,8 @@ import {
   DataTableFilterGroup,
   DataTableRangeFilter,
 } from "@/client/components/table/DataTableToolbar";
+import type { ReactNode } from "react";
+import { Button } from "@/client/components/ui/button";
 import { Input } from "@/client/components/ui/input";
 import { Toggle } from "@/client/components/ui/toggle";
 import {
@@ -10,6 +12,7 @@ import {
   toggleIntentFilter,
 } from "@/client/features/keywords/keywordResearchTypes";
 import { INTENT_LABELS } from "@/client/features/keywords/components/IntentBadge";
+import { TOPIC_WORDS_RULE } from "@/shared/topic-words";
 import type { KeywordResearchControllerState } from "./types";
 
 type FiltersForm = KeywordResearchControllerState["filtersForm"];
@@ -51,11 +54,15 @@ export function FilterTextInput({
   name,
   label,
   placeholder,
+  disabled,
+  children,
 }: {
   form: FiltersForm;
   name: "include" | "exclude" | "topics";
+  disabled?: boolean;
   label: string;
   placeholder: string;
+  children?: ReactNode;
 }) {
   return (
     <DataTableFilterGroup label={label}>
@@ -64,13 +71,64 @@ export function FilterTextInput({
           <Input
             aria-label={label}
             className="h-7"
+            disabled={disabled}
             placeholder={placeholder}
             value={field.state.value}
             onChange={(event) => field.handleChange(event.target.value)}
           />
         )}
       </form.Field>
+      {children}
     </DataTableFilterGroup>
+  );
+}
+
+/**
+ * Under the topic field: whether it matches the project's saved list, and the
+ * explicit save. Editing the field alone never changes the saved list.
+ */
+export function TopicWordsDefaultControls({
+  topicWords,
+}: {
+  topicWords: KeywordResearchControllerState["topicWords"];
+}) {
+  if (!topicWords.loaded) return null;
+  return (
+    <div className="space-y-1.5">
+      {!topicWords.valid ? (
+        <p className="text-xs text-destructive">{TOPIC_WORDS_RULE}</p>
+      ) : topicWords.changedElsewhere ? (
+        <p className="text-xs text-muted-foreground">
+          Project default changed elsewhere — saving will replace it.
+        </p>
+      ) : topicWords.differs ? (
+        <p className="text-xs text-muted-foreground">
+          Not saved — differs from project default.
+        </p>
+      ) : null}
+      <div className="flex flex-wrap gap-1.5">
+        <Button
+          type="button"
+          size="xs"
+          variant="outline"
+          disabled={!topicWords.canSave}
+          onClick={topicWords.save}
+        >
+          {topicWords.isSaving ? "Saving…" : "Save as project default"}
+        </Button>
+        {topicWords.differs ? (
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost"
+            disabled={topicWords.isSaving}
+            onClick={topicWords.resetToSaved}
+          >
+            Reset to project default
+          </Button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

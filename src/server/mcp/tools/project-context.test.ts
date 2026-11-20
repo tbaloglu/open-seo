@@ -4,6 +4,7 @@ import {
   updateProjectContextTool,
 } from "./project-context";
 import { makeToolContext, textContent } from "./tool-test-support";
+import { updateProjectContextSchema } from "@/types/schemas/projectContext";
 
 // The repository is the seam, not the service: the tool's contract is that an
 // MCP write reaches storage attributed to MCP and reads back as the same digest
@@ -19,6 +20,8 @@ const mocks = vi.hoisted(() => ({
   listTemplates: vi.fn(),
   deleteSection: vi.fn(),
   deleteResearchLogEntries: vi.fn(),
+  listWords: vi.fn(),
+  replaceWords: vi.fn(),
 }));
 
 vi.mock("cloudflare:workers", () => ({ env: {} }));
@@ -43,6 +46,10 @@ vi.mock(
   "@/server/features/reports/repositories/ReportTemplateRepository",
   () => ({ ReportTemplateRepository: mocks }),
 );
+vi.mock(
+  "@/server/features/topic-words/repositories/TopicWordsRepository",
+  () => ({ TopicWordsRepository: mocks }),
+);
 
 beforeEach(() => {
   mocks.getProjectForOrganization.mockResolvedValue({ id: "project_1" });
@@ -52,6 +59,8 @@ beforeEach(() => {
   mocks.listKeyPages.mockResolvedValue([]);
   mocks.listResearchLog.mockResolvedValue([]);
   mocks.listTemplates.mockResolvedValue([]);
+  mocks.listWords.mockResolvedValue([]);
+  mocks.replaceWords.mockReturnValue([]);
 });
 
 describe("update_project_context", () => {
@@ -116,9 +125,54 @@ describe("update_project_context", () => {
     );
     expect(textContent(result)).toContain("Grow signups");
   });
+
+  // Lets an agent set the keyword-research topic filter for the project.
+  it("replaces the project's topic words, deduped", async () => {
+    await updateProjectContextTool.handler(
+      {
+        projectId: "project_1",
+        updates: [{ topicWords: ["Turşu", "turşu", "kavanoz"] }],
+      },
+      makeToolContext(),
+    );
+
+    expect(mocks.replaceWords).toHaveBeenCalledWith(
+      expect.anything(),
+      "project_1",
+      ["Turşu", "kavanoz"],
+    );
+  });
+
+  // The topic filter splits on commas and plus signs, so a stored "c++"
+  // would come back from the field as "c" and be written over.
+  it("rejects topic words the filter would split, and says how to set them", () => {
+    for (const word of ["c++", "a,b", "a\nb"]) {
+      expect(
+        updateProjectContextSchema.safeParse({
+          projectId: "project_1",
+          updates: [{ topicWords: [word] }],
+        }).success,
+      ).toBe(false);
+    }
+    expect(updateProjectContextTool.config.description).toContain("topicWords");
+  });
 });
 
 describe("get_project_context", () => {
+  it("returns the saved topic words", async () => {
+    mocks.listWords.mockResolvedValue(["turşu", "kavanoz"]);
+
+    const result = await getProjectContextTool.handler(
+      { projectId: "project_1" },
+      makeToolContext(),
+    );
+
+    expect(result.structuredContent).toMatchObject({
+      topicWords: ["turşu", "kavanoz"],
+    });
+    expect(textContent(result)).toContain("## Topic words\n\nturşu, kavanoz");
+  });
+
   // An agent reads this before it sets the brand name, or reports what AI
   // visibility looks for.
   it("shows a saved brand name", async () => {
