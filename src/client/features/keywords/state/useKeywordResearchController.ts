@@ -13,6 +13,7 @@ import {
 import { useKeywordFiltering } from "@/client/features/keywords/hooks/useKeywordFiltering";
 import { usePreferredKeywordGrouping } from "@/client/features/keywords/hooks/usePreferredKeywordGrouping";
 import { useLocalKeywordFilters } from "@/client/features/keywords/hooks/useLocalKeywordFilters";
+import { useProjectTopicWords } from "@/client/features/keywords/hooks/useProjectTopicWords";
 import { useKeywordResearchData } from "@/client/features/keywords/hooks/useKeywordResearchData";
 import { useKeywordSerpAnalysis } from "@/client/features/keywords/hooks/useKeywordSerpAnalysis";
 import { captureClientEvent } from "@/client/lib/posthog";
@@ -80,6 +81,7 @@ export function useKeywordResearchController(
     values: filterValues,
     resetFilters,
   } = useLocalKeywordFilters(input.projectId);
+  const topicWords = useProjectTopicWords(input.projectId, filtersForm);
   const uiState = useKeywordUiState(
     Object.values(filterValues).some((v) => v.trim() !== ""),
   );
@@ -272,6 +274,7 @@ export function useKeywordResearchController(
     setPreferredGroupKeywords,
     activeFilterCount,
     topicHiddenCount,
+    topicWords,
     activeSerpKeyword,
     confirmSave,
     controlsForm,

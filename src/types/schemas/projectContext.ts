@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { topicWordsSchema } from "@/shared/topic-words";
 
 // Shared vocabulary for project memory. The MCP tools, the server functions and
 // the settings UI all validate against these, so the wire shape of a patch op is
@@ -109,6 +110,8 @@ const projectContextUpdateSchema = z.union([
       summary: z.string().trim().min(1).max(1000),
     }),
   }),
+  // Replaces the whole list; an empty array clears it.
+  z.strictObject({ topicWords: topicWordsSchema }),
 ]);
 
 export type ProjectContextUpdate = z.infer<typeof projectContextUpdateSchema>;

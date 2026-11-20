@@ -21,6 +21,15 @@ import {
 } from "@/client/lib/active-project";
 import { toastInitialAudit } from "@/client/features/projects/initialAuditToast";
 import { archiveProject, updateProject } from "@/serverFunctions/projects";
+import {
+  topicWordsQueryOptions,
+  useSaveTopicWords,
+} from "@/client/features/keywords/hooks/useProjectTopicWords";
+import {
+  splitTopicWords,
+  TOPIC_WORDS_RULE,
+  topicWordsSchema,
+} from "@/shared/topic-words";
 import { isEveryAppClientAuthMode } from "@/lib/auth-mode";
 import { isDefaultProjectName } from "@/shared/ai-visibility";
 import type { ProjectSummary } from "./types";
@@ -42,6 +51,10 @@ export function ProjectGeneralSettings({ projectId }: { projectId: string }) {
           <div className="space-y-8">
             {/* key resets the form's local state when switching between projects */}
             <GeneralSection key={project.id} project={project} />
+            <TopicWordsSection
+              key={`topics-${project.id}`}
+              projectId={project.id}
+            />
             <DangerSection project={project} canArchive={projects.length > 1} />
           </div>
         );
@@ -203,6 +216,76 @@ function GeneralSection({ project }: { project: ProjectSummary }) {
         </form.Form>
       </form.AppForm>
     </section>
+  );
+}
+
+function TopicWordsSection({ projectId }: { projectId: string }) {
+  const query = useQuery(topicWordsQueryOptions(projectId));
+
+  return (
+    <section className="space-y-3">
+      <SectionHeader title="Topic words" />
+      <QueryState query={query} errorFallback="Failed to load topic words">
+        {(words) => <TopicWordsForm projectId={projectId} words={words} />}
+      </QueryState>
+    </section>
+  );
+}
+
+const topicWordsFormSchema = z.object({
+  topics: z
+    .string()
+    .refine(
+      (value) => topicWordsSchema.safeParse(splitTopicWords(value)).success,
+      TOPIC_WORDS_RULE,
+    ),
+});
+
+function TopicWordsForm({
+  projectId,
+  words,
+}: {
+  projectId: string;
+  words: string[];
+}) {
+  const mutation = useSaveTopicWords(projectId);
+
+  const form = useAppForm({
+    defaultValues: { topics: words.join(", ") },
+    validationLogic: revalidateLogic(),
+    validators: { onDynamic: topicWordsFormSchema },
+    onSubmit: async ({ value, formApi }) => {
+      const saved = await mutation.mutateAsync(splitTopicWords(value.topics));
+      toast.success("Topic words saved");
+      if (formApi.state.values === value) {
+        formApi.reset({ topics: saved.join(", ") });
+      }
+    },
+  });
+
+  return (
+    <form.AppForm>
+      <form.Form className="flex flex-col gap-4">
+        <form.AppField name="topics">
+          {(field) => (
+            <field.TextField
+              label="Keyword research topic words"
+              description="Comma-separated. Keyword research starts its Topic Words filter from these, showing only keywords with a word that starts with one of them. Case and Turkish i/ı/İ spellings count as the same word."
+              placeholder="pickle, brine, jar"
+            />
+          )}
+        </form.AppField>
+        <div className="flex justify-end">
+          <form.Subscribe selector={(state) => state.isDefaultValue}>
+            {(isDefaultValue) => (
+              <form.SubmitButton disabled={isDefaultValue}>
+                Save topic words
+              </form.SubmitButton>
+            )}
+          </form.Subscribe>
+        </div>
+      </form.Form>
+    </form.AppForm>
   );
 }
 
