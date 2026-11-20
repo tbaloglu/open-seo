@@ -58,7 +58,7 @@ type ProjectAuthContext = {
 /** Self-hosted GSC requires the operator to provide a Google OAuth client and
  *  BETTER_AUTH_SECRET. Return this setup nudge before attempting a token lookup
  *  when either is missing. */
-async function missingSelfHostedGoogleClientResponse(
+export async function missingSelfHostedGoogleClientResponse(
   context: ProjectAuthContext,
   projectId: string,
 ) {
@@ -99,7 +99,7 @@ function invalidRequest(
   });
 }
 
-function describeGscError(error: unknown): string {
+export function describeGscError(error: unknown): string {
   if (error instanceof GscNotConnectedError) {
     return "Search Console is not connected for this project.";
   }

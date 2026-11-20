@@ -170,3 +170,43 @@ export const rankTrackerSchema = z.looseObject({
 });
 
 export type RankTrackerData = z.infer<typeof rankTrackerSchema>;
+
+export const keywordGapSchema = z.looseObject({
+  // Normalized competitor domain; always read with its subdomains.
+  competitor: z.string(),
+  scope: z.string(),
+  siteUrl: z.string(),
+  startDate: z.string(),
+  endDate: z.string(),
+  locationCode: z.number(),
+  languageCode: z.string(),
+  maxRank: z.number(),
+  positionThreshold: z.number(),
+  counts: z.looseObject({
+    // Distinct competitor keywords at maxRank or better that were read.
+    competitorTotal: z.number(),
+    // All of the competitor's keywords at maxRank or better in DataForSEO Labs.
+    competitorTotalInLabs: z.number().nullable(),
+    // Competitor keywords the site also has Search Console impressions for.
+    matched: z.number(),
+    gap: z.number(),
+    returned: z.number(),
+  }),
+  searchConsoleQueries: z.number(),
+  searchConsoleTruncated: z.boolean(),
+  keywords: z.array(
+    z.looseObject({
+      keyword: z.string(),
+      searchVolume: z.number().nullable(),
+      competitorRank: z.number().nullable(),
+      competitorUrl: z.string().nullable(),
+      intent: z.string().nullable(),
+      ourImpressions: z.number().nullable(),
+      ourClicks: z.number().nullable(),
+      ourPosition: z.number().nullable(),
+    }),
+  ),
+  meta: mcpMetaOutputSchema.optional(),
+});
+
+export type KeywordGapData = z.infer<typeof keywordGapSchema>;
