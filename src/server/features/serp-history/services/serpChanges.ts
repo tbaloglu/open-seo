@@ -1,10 +1,10 @@
 import { sortBy } from "remeda";
 import { AppError } from "@/server/lib/errors";
+import { isOwnSite } from "@/shared/serp-history";
 import { SerpHistoryRepository } from "../repositories/SerpHistoryRepository";
 import {
   getValidatedConfig,
   indexPages,
-  isOwnSite,
   pageKey,
   resolveDevice,
   type Device,

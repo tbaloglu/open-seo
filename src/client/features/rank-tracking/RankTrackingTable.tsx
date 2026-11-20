@@ -24,6 +24,7 @@ import {
   KeywordTrendModal,
   type KeywordTrendTarget,
 } from "./KeywordTrendModal";
+import { SerpHistoryDialog } from "./serp/SerpHistoryDialog";
 import type { SelectionAnchor } from "@/client/components/table/tableSelection";
 
 // A tracker holds thousands of keywords, and a browser can't draw them all at
@@ -71,6 +72,7 @@ export function RankTrackingTable({
   const [trendTarget, setTrendTarget] = useState<KeywordTrendTarget | null>(
     null,
   );
+  const [serpTarget, setSerpTarget] = useState<KeywordTrendTarget | null>(null);
   const selectAnchorRef = useRef<SelectionAnchor | null>(null);
 
   const handleKeywordClick = useCallback(
@@ -87,6 +89,11 @@ export function RankTrackingTable({
     () => ({
       selectAnchorRef,
       onKeywordClick: handleKeywordClick,
+      onSerpClick: (row: RankTrackingRow) =>
+        setSerpTarget({
+          trackingKeywordId: row.trackingKeywordId,
+          keyword: row.keyword,
+        }),
       onSetPinned: setKeywordPinned,
     }),
     [handleKeywordClick, setKeywordPinned],
@@ -233,6 +240,18 @@ export function RankTrackingTable({
           locationName={locationName ?? undefined}
           serpDepth={serpDepth}
           onClose={() => setTrendTarget(null)}
+        />
+      )}
+
+      {serpTarget && (
+        <SerpHistoryDialog
+          target={serpTarget}
+          projectId={projectId}
+          configId={configId}
+          // The table shows one device at a time.
+          device={showDesktop ? "desktop" : "mobile"}
+          domain={domain}
+          onClose={() => setSerpTarget(null)}
         />
       )}
 

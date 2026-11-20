@@ -1,4 +1,14 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  exists,
+  inArray,
+  isNotNull,
+  or,
+  sql,
+} from "drizzle-orm";
 import { db } from "@/db";
 import {
   rankCheckRuns,
@@ -156,8 +166,8 @@ async function getSnapshotPositions(runId: string) {
     .where(eq(rankSnapshots.runId, runId));
 }
 
-/** A config's completed full runs, newest first. */
-async function getCompletedRuns(configId: string) {
+/** A config's latest completed full runs, newest first. */
+async function getCompletedRuns(configId: string, limit = MAX_RUNS) {
   return db
     .select({ id: rankCheckRuns.id, startedAt: rankCheckRuns.startedAt })
     .from(rankCheckRuns)
@@ -169,7 +179,7 @@ async function getCompletedRuns(configId: string) {
       ),
     )
     .orderBy(desc(rankCheckRuns.startedAt), desc(rankCheckRuns.id))
-    .limit(MAX_RUNS);
+    .limit(limit);
 }
 
 /** One keyword's latest completed checks on a device, newest first. */
@@ -255,6 +265,96 @@ async function getPages(input: {
   return { results, features };
 }
 
+// A run or keyword counts as saved when either table has a row for it.
+
+/** Which of the runs have any saved page on the device, one EXISTS per run. */
+async function getSavedRunIds(runIds: string[], device: Device) {
+  if (runIds.length === 0) return [];
+  const savedIn = (
+    table: typeof serpSnapshotResults | typeof serpSnapshotFeatures,
+  ) =>
+    exists(
+      db
+        .select({ one: sql`1` })
+        .from(table)
+        .where(
+          and(eq(table.runId, rankCheckRuns.id), eq(table.device, device)),
+        ),
+    );
+  const rows = await db
+    .select({ id: rankCheckRuns.id })
+    .from(rankCheckRuns)
+    .where(
+      and(
+        inArray(rankCheckRuns.id, runIds),
+        or(savedIn(serpSnapshotResults), savedIn(serpSnapshotFeatures)),
+      ),
+    );
+  return rows.map((row) => row.id);
+}
+
+/** The keywords each run saved a page for on the device. */
+async function getSavedKeywords(runIds: string[], device: Device) {
+  if (runIds.length === 0) return [];
+  const pairs = (
+    table: typeof serpSnapshotResults | typeof serpSnapshotFeatures,
+  ) =>
+    db
+      .selectDistinct({
+        runId: table.runId,
+        trackingKeywordId: table.trackingKeywordId,
+      })
+      .from(table)
+      .where(and(inArray(table.runId, runIds), eq(table.device, device)));
+  const [results, features] = await Promise.all([
+    pairs(serpSnapshotResults),
+    pairs(serpSnapshotFeatures),
+  ]);
+  return [...results, ...features];
+}
+
+/** The top-10 domains of the runs' saved pages, without urls or titles. */
+async function getTop10Domains(runIds: string[], device: Device) {
+  if (runIds.length === 0) return [];
+  return db
+    .select({
+      runId: serpSnapshotResults.runId,
+      trackingKeywordId: serpSnapshotResults.trackingKeywordId,
+      domain: serpSnapshotResults.domain,
+    })
+    .from(serpSnapshotResults)
+    .where(
+      and(
+        inArray(serpSnapshotResults.runId, runIds),
+        eq(serpSnapshotResults.device, device),
+        isNotNull(serpSnapshotResults.domain),
+      ),
+    );
+}
+
+/** One run's values of the given feature types on the device. */
+async function getFeatureValues(input: {
+  runId: string;
+  device: Device;
+  featureTypes: string[];
+}) {
+  return db
+    .select({
+      trackingKeywordId: serpSnapshotFeatures.trackingKeywordId,
+      featureType: serpSnapshotFeatures.featureType,
+      value: serpSnapshotFeatures.value,
+      domain: serpSnapshotFeatures.domain,
+    })
+    .from(serpSnapshotFeatures)
+    .where(
+      and(
+        eq(serpSnapshotFeatures.runId, input.runId),
+        eq(serpSnapshotFeatures.device, input.device),
+        inArray(serpSnapshotFeatures.featureType, input.featureTypes),
+      ),
+    );
+}
+
 export const SerpHistoryRepository = {
   replacePages,
   deletePages,
@@ -263,4 +363,8 @@ export const SerpHistoryRepository = {
   getKeywordChecks,
   getSnapshots,
   getPages,
+  getSavedRunIds,
+  getSavedKeywords,
+  getTop10Domains,
+  getFeatureValues,
 };
