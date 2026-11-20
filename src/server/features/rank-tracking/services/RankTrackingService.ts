@@ -1,13 +1,9 @@
 import { env } from "cloudflare:workers";
 import { sortBy } from "remeda";
-import {
-  customerHasPaidPlan,
-  type BillingCustomerContext,
-} from "@/server/billing/subscription";
+import type { BillingCustomerContext } from "@/server/billing/subscription";
 import { RankTrackingRepository } from "@/server/features/rank-tracking/repositories/RankTrackingRepository";
 import { assertSerpLocationNameAccepted } from "@/server/lib/dataforseo/serp-location-validate";
 import { AppError } from "@/server/lib/errors";
-import { isHostedServerAuthMode } from "@/server/lib/runtime-env";
 import type {
   RankCheckScheduleTime,
   RankTrackingConfig,
@@ -27,7 +23,10 @@ import { resolveNextCheckAt } from "./configSchedule";
 import { getIsoCountryCode, resolveMarket } from "@/shared/keyword-locations";
 import { getLatestResults } from "./rankTrackingResults";
 import { toRankTrackingTimestamp } from "@/server/features/rank-tracking/rankTrackingTimestamps";
-import { RankTrackingKeywordService } from "./RankTrackingKeywordService";
+import {
+  RankTrackingKeywordService,
+  requireRankCheckAccess,
+} from "./RankTrackingKeywordService";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -313,19 +312,6 @@ async function getLatestRun(configId: string, projectId: string) {
 // Keyword metrics (volume, difficulty, CPC)
 // ---------------------------------------------------------------------------
 
-async function refreshKeywordMetrics(
-  configId: string,
-  projectId: string,
-  billingCustomer: BillingCustomerContext,
-): Promise<{ updated: number }> {
-  await requireRankCheckAccess(billingCustomer.organizationId);
-  return RankTrackingKeywordService.refreshMetrics(
-    configId,
-    projectId,
-    billingCustomer,
-  );
-}
-
 // ---------------------------------------------------------------------------
 // MCP/browser read models and access policy
 // ---------------------------------------------------------------------------
@@ -378,15 +364,6 @@ async function getPositionHistory(input: {
     ),
   ]);
   return { config, device, keywords, cells };
-}
-
-async function requireRankCheckAccess(organizationId: string) {
-  if (!(await isHostedServerAuthMode())) return;
-  if (await customerHasPaidPlan(organizationId)) return;
-  throw new AppError(
-    "PAYMENT_REQUIRED",
-    "Upgrade to the paid plan to run rank checks",
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -454,7 +431,7 @@ export const RankTrackingService = {
   triggerAutoCheck,
   getLatestRun,
   estimateCost: RankTrackingKeywordService.estimateCost,
-  refreshKeywordMetrics,
+  refreshKeywordMetrics: RankTrackingKeywordService.refreshMetrics,
   getConfigs,
   getTracker,
   getPositionHistory,

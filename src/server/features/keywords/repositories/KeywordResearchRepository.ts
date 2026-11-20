@@ -19,7 +19,7 @@ import {
   savedKeywords,
 } from "@/db/schema";
 import { lowercaseKeyword } from "@/shared/text-match";
-import { SavedKeywordLegacyQueries } from "./SavedKeywordLegacyQueries";
+import { KeywordMetricsQueries } from "./KeywordMetricsQueries";
 import {
   SavedKeywordTagsRepository,
   type SavedKeywordTagRecord,
@@ -394,9 +394,7 @@ export const KeywordResearchRepository = {
   saveKeywordsToProject,
   countSavedKeywordsForOrganization,
   listSavedKeywordRowsByKeywords,
-  listSavedKeywordsWithStrayDot:
-    SavedKeywordLegacyQueries.listSavedKeywordsWithStrayDot,
-  getKeywordMetric: SavedKeywordLegacyQueries.getKeywordMetric,
+  listKeywordMetrics: KeywordMetricsQueries.listKeywordMetrics,
   listSavedKeywordsByProject,
   addTagsToSavedKeywords: SavedKeywordTagsRepository.addTagsToSavedKeywords,
   replaceTagsForSavedKeywords:

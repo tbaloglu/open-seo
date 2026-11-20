@@ -123,6 +123,21 @@ describe("saved keywords in the project language", () => {
     ]);
   });
 
+  it("finds old rows with several dotted capitals", async () => {
+    // Three "i"s: every combination is looked up. Six: word-initial ones.
+    await seed([
+      ["three", "i\u0307stanbul i\u0307zmir", BEFORE_CUTOFF],
+      ["six", "i\u0307stanbul i\u0307zmir i\u0307ki bilet", BEFORE_CUTOFF],
+    ]);
+
+    const result = await save(["İstanbul İzmir", "İstanbul İzmir İki bilet"]);
+
+    expect(result.savedKeywordIds).toEqual(
+      expect.arrayContaining(["three", "six"]),
+    );
+    expect(await storedKeywords()).toHaveLength(2);
+  });
+
   it("never reuses an old row for a word asked for in the same save", async () => {
     await seed([["kir", "kir düğünü", BEFORE_CUTOFF]]);
 
@@ -131,16 +146,26 @@ describe("saved keywords in the project language", () => {
     expect(await storedKeywords()).toEqual(["kir düğünü", "kır düğünü"]);
   });
 
-  it("shows research metrics on an old row the keyword is saved onto", async () => {
-    await seed([["dotted", "i\u0307stanbul avukat", BEFORE_CUTOFF]]);
+  it("copies research metrics onto an old row unless its own are newer", async () => {
+    await seed([
+      ["lawyer", "i\u0307stanbul avukat", BEFORE_CUTOFF],
+      ["plumber", "i\u0307stanbul tesisatçı", BEFORE_CUTOFF],
+    ]);
+    // Research wrote under the current text; the plumber row has newer
+    // numbers of its own (SQLite default format vs ISO, both read as UTC).
     await testDb.client.execute(`
-      INSERT INTO keyword_metrics (project_id, keyword, location_code, language_code, search_volume)
-      VALUES ('project', 'istanbul avukat', 2792, 'tr', 880)`);
+      INSERT INTO keyword_metrics (project_id, keyword, location_code, language_code, search_volume, fetched_at)
+      VALUES ('project', 'istanbul avukat', 2792, 'tr', 880, '2026-11-10T00:00:00.000Z'),
+             ('project', 'istanbul tesisatçı', 2792, 'tr', 10, '2026-11-10T00:00:00.000Z'),
+             ('project', 'i\u0307stanbul tesisatçı', 2792, 'tr', 70, '2026-11-15 00:00:00')`);
 
-    await save(["İstanbul avukat"]);
+    await save(["İstanbul avukat", "İstanbul tesisatçı"]);
 
-    expect(await listSaved()).toEqual([
-      expect.objectContaining({ id: "dotted", searchVolume: 880 }),
+    expect(
+      (await listSaved()).map((row) => [row.id, row.searchVolume]),
+    ).toEqual([
+      ["lawyer", 880],
+      ["plumber", 70],
     ]);
   });
 

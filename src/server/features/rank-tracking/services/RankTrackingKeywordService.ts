@@ -12,6 +12,7 @@ import {
 import { RankTrackingRepository } from "@/server/features/rank-tracking/repositories/RankTrackingRepository";
 import type { rankTrackingKeywords } from "@/db/schema";
 import {
+  customerHasPaidPlan,
   getPaidPlanId,
   type BillingCustomerContext,
 } from "@/server/billing/subscription";
@@ -172,6 +173,7 @@ async function refreshMetrics(
   projectId: string,
   billingCustomer: BillingCustomerContext,
 ): Promise<{ updated: number }> {
+  await requireRankCheckAccess(billingCustomer.organizationId);
   const config = await getValidatedConfig(configId, projectId);
   const keywords = await RankTrackingRepository.getKeywordsForConfig(configId);
   if (keywords.length === 0) return { updated: 0 };
@@ -221,6 +223,16 @@ async function refreshMetrics(
   if (updates.length === 0) return { updated: 0 };
   await RankTrackingRepository.updateKeywordMetrics(updates);
   return { updated: updates.length };
+}
+
+/** Paid hosted plans only; self-hosters always can. */
+export async function requireRankCheckAccess(organizationId: string) {
+  if (!(await isHostedServerAuthMode())) return;
+  if (await customerHasPaidPlan(organizationId)) return;
+  throw new AppError(
+    "PAYMENT_REQUIRED",
+    "Upgrade to the paid plan to run rank checks",
+  );
 }
 
 async function removeKeywords(

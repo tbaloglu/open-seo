@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { AppError } from "@/server/lib/errors";
 import { SerpHistoryService } from "@/server/features/serp-history/services/SerpHistoryService";
 import { buildProjectMeta } from "@/server/mcp/context";
 import { mcpResponse } from "@/server/mcp/formatters";
@@ -19,7 +18,8 @@ const inputSchema = {
     ),
   trackingKeywordId: z
     .string()
-    .min(1)
+    .trim()
+    .uuid()
     .optional()
     .describe(
       'Tracked keyword ID from get_rank_tracker. Picks the exact keyword, e.g. when a match-case tracker tracks both "Turşu" and "turşu".',
@@ -104,12 +104,6 @@ export const getSerpHistoryTool = {
     },
   },
   handler: withMcpProjectAuth(async (args: Args, context) => {
-    if (!args.keyword && !args.trackingKeywordId) {
-      throw new AppError(
-        "VALIDATION_ERROR",
-        "Pass keyword or trackingKeywordId.",
-      );
-    }
     const { config, keyword, device, checks } =
       await SerpHistoryService.getKeywordHistory({
         projectId: args.projectId,

@@ -1,8 +1,9 @@
 import { isTurkicLanguage, lowercaseKeyword } from "@/shared/text-match";
 
 // Keyword rows written before this moment were lower-cased with plain
-// toLowerCase(); later rows use lowercaseKeyword.
-const LEGACY_NORMALIZATION_CUTOFF = Date.parse("2026-11-21T00:00:00Z");
+// toLowerCase(); later rows use lowercaseKeyword. Set to just before the
+// deploy that ships lowercaseKeyword, never later.
+const LEGACY_NORMALIZATION_CUTOFF = "2026-11-20T00:00:00Z";
 
 /**
  * Plain toLowerCase() turned "İ" into i plus a combining dot (U+0307), in
@@ -10,6 +11,38 @@ const LEGACY_NORMALIZATION_CUTOFF = Date.parse("2026-11-21T00:00:00Z");
  */
 export function withoutStrayDot(text: string) {
   return text.normalize("NFC").replace(/i\u0307/g, "i");
+}
+
+/**
+ * Texts plain toLowerCase() may have stored for `keyword` when some of its
+ * "i"s were typed as "İ" ("i\u0307stanbul" for "istanbul"). With up to four
+ * "i"s, every combination; with more, the word-initial ones and all of them,
+ * so an unusual older row may be missed (it then gets a twin, nothing lost).
+ */
+export function strayDotVariants(keyword: string): string[] {
+  const positions = [...keyword.matchAll(/i/g)].map((match) => match.index);
+  let subsets: number[][];
+  if (positions.length <= 4) {
+    subsets = Array.from({ length: 2 ** positions.length - 1 }, (_, i) =>
+      positions.filter((_position, bit) => ((i + 1) >> bit) & 1),
+    );
+  } else {
+    const initial = positions.filter(
+      (position) => position === 0 || /\s/.test(keyword[position - 1]),
+    );
+    subsets = initial.length > 0 ? [initial, positions] : [positions];
+  }
+  return [
+    ...new Set(
+      subsets.map((subset) =>
+        subset.reduceRight(
+          (text, position) =>
+            `${text.slice(0, position + 1)}\u0307${text.slice(position + 1)}`,
+          keyword,
+        ),
+      ),
+    ),
+  ];
 }
 
 /**
@@ -25,12 +58,18 @@ export function legacyTurkicLowercase(raw: string, languageCode: string) {
 }
 
 /**
- * Whether a row was written by the old lower-casing. SQLite defaults store
- * "YYYY-MM-DD HH:MM:SS" (UTC, no T or Z); Postgres stores ISO text.
+ * A stored timestamp in milliseconds. SQLite defaults store
+ * "YYYY-MM-DD HH:MM:SS" (UTC, no T or Z); Postgres and app writes store ISO.
  */
-export function writtenBeforeLegacyCutoff(createdAt: string) {
-  const parsed = Date.parse(
-    createdAt.includes("T") ? createdAt : `${createdAt.replace(" ", "T")}Z`,
+export function parseStoredTimestamp(value: string) {
+  return Date.parse(
+    value.includes("T") ? value : `${value.replace(" ", "T")}Z`,
   );
-  return parsed < LEGACY_NORMALIZATION_CUTOFF;
+}
+
+/** Whether a row was written by the old lower-casing. */
+export function writtenBeforeLegacyCutoff(createdAt: string) {
+  return (
+    parseStoredTimestamp(createdAt) < Date.parse(LEGACY_NORMALIZATION_CUTOFF)
+  );
 }

@@ -50,18 +50,18 @@ const SAVE_RATE_LIMIT_PER_MINUTE = 3_000;
 // keywords (SAVE_KEYWORDS_RATE_LIMIT allows 60 a minute).
 const KEYWORDS_PER_RATE_LIMIT_UNIT = 50;
 
-async function assertCanSaveKeywords(
-  input: ResolvedSaveKeywordsInput & { organizationId: string },
-  keywords: string[],
+async function assertUnderSaveRateLimit(
+  organizationId: string,
+  keywordCount: number,
 ) {
   // Declared only on the hosted stack (deploy/alchemy/alchemy.run.ts). Counts
   // every keyword sent, re-saves included: they still write metrics and tags.
   const rateLimit = env.SAVE_KEYWORDS_RATE_LIMIT;
   if (rateLimit) {
-    const units = Math.ceil(keywords.length / KEYWORDS_PER_RATE_LIMIT_UNIT);
+    const units = Math.ceil(keywordCount / KEYWORDS_PER_RATE_LIMIT_UNIT);
     const outcomes = await Promise.all(
       Array.from({ length: units }, () =>
-        rateLimit.limit({ key: input.organizationId }),
+        rateLimit.limit({ key: organizationId }),
       ),
     );
     if (outcomes.some((outcome) => !outcome.success)) {
@@ -71,7 +71,12 @@ async function assertCanSaveKeywords(
       );
     }
   }
+}
 
+async function assertUnderOrganizationCap(
+  input: ResolvedSaveKeywordsInput & { organizationId: string },
+  keywords: string[],
+) {
   if (!(await isHostedServerAuthMode())) return;
   // Plain read-then-write: concurrent saves can both pass just under the cap,
   // so a workspace may briefly hold a few hundred more. Re-saving keywords the
@@ -97,11 +102,20 @@ async function assertCanSaveKeywords(
 export async function saveKeywords(
   input: ResolvedSaveKeywordsInput & { organizationId: string },
 ) {
+  // Before any read: the limit only needs how many keywords were sent.
+  await assertUnderSaveRateLimit(
+    input.organizationId,
+    new Set(
+      input.keywords
+        .map((keyword) => normalizeKeyword(keyword, input.languageCode))
+        .filter((keyword) => keyword.length > 0),
+    ).size,
+  );
   const storedByKeyword = await matchStoredKeywords(input);
   const normalizedKeywords = [...new Set(storedByKeyword.values())];
   // After matching, so re-saving keywords stored the older way stays allowed
   // at the cap.
-  await assertCanSaveKeywords(input, normalizedKeywords);
+  await assertUnderOrganizationCap(input, normalizedKeywords);
 
   const metricByKeyword = new Map(
     (input.metrics ?? [])
