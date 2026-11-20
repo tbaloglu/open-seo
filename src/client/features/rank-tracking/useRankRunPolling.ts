@@ -33,6 +33,10 @@ export function useRankRunPolling(projectId: string, configId: string) {
         void queryClient.invalidateQueries({
           queryKey: ["rankKeywordHistory", projectId, configId],
         });
+        // Every SERP history tab and dialog of this tracker.
+        void queryClient.invalidateQueries({
+          queryKey: ["serpHistory", projectId, configId],
+        });
       }
 
       // A stale run stays active until the next start fails it (no cron

@@ -1,6 +1,6 @@
 import { useMemo, type MutableRefObject } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Star } from "lucide-react";
+import { ListOrdered, Star } from "lucide-react";
 import { makeSelectionColumn } from "@/client/components/table/DataTable";
 import { ScoreBadge } from "@/client/components/table/ScoreBadge";
 import { Badge } from "@/client/components/ui/badge";
@@ -119,6 +119,7 @@ const pinnedColumn: ColumnDef<RankTrackingRow> = {
 type RankTrackingActions = {
   selectAnchorRef: MutableRefObject<SelectionAnchor | null>;
   onKeywordClick: (row: RankTrackingRow) => void;
+  onSerpClick: (row: RankTrackingRow) => void;
   onSetPinned: (vars: { trackingKeywordId: string; pinned: boolean }) => void;
 };
 
@@ -157,6 +158,16 @@ function makeKeywordColumn(
             >
               {row.original.keyword}
             </button>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="text-muted-foreground"
+              onClick={() => actions.onSerpClick(row.original)}
+              aria-label={`SERP history for ${row.original.keyword}`}
+              title="SERP history: top 10 and features per check"
+            >
+              <ListOrdered />
+            </Button>
           </>
         ) : (
           <span className="font-medium">{row.original.keyword}</span>

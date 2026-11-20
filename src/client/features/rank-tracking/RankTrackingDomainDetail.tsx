@@ -37,6 +37,7 @@ import {
   type RankTrackingDetailSearch,
 } from "@/types/schemas/rank-tracking-search";
 import { AddKeywordsPanel } from "./AddKeywordsPanel";
+import { RankTrackingTabs, SerpTab } from "./serp/SerpTabs";
 import {
   FilterPanel,
   applyFilters,
@@ -265,7 +266,8 @@ export function RankTrackingDomainDetail({
             // The sort column is per device, so a device switch resets it.
             onSearchChange({ device, sort: undefined, order: undefined })
           }
-          comparePeriod={comparePeriod}
+          // The SERP tabs pick their own checks.
+          comparePeriod={search.tab ? undefined : comparePeriod}
           onComparePeriodChange={(compare) => onSearchChange({ compare })}
           onEdit={onEdit}
           onToggleAddKeywords={() => setShowAddKeywords((c) => !c)}
@@ -282,108 +284,128 @@ export function RankTrackingDomainDetail({
           </div>
         )}
 
-        {/* Portfolio overview */}
-        {(rows?.length ?? 0) > 0 && (
-          <RankTrackingOverview
-            device={activeDevice}
-            projectId={projectId}
-            configId={config.id}
-          />
-        )}
-
-        {/* Table toolbar */}
-        <RankTrackingTableToolbar
-          showFilters={showFilters}
-          onToggleFilters={() => setShowFilters((c) => !c)}
-          activeFilterCount={activeFilterCount}
-          isRunning={isRunning}
-          latestRun={latestRun}
-          keywordCount={filtered.length}
-          viewMode={effectiveViewMode}
-          onViewModeChange={(view) =>
-            onSearchChange({ view: view === "history" ? view : undefined })
+        <RankTrackingTabs
+          tab={search.tab ?? "keywords"}
+          onTabChange={(tab) =>
+            onSearchChange({ tab: tab === "keywords" ? undefined : tab })
           }
-          historyAvailable={historyAvailable}
-          onExport={(action) => {
-            if (action !== "copy-list") return exportFiltered(action);
-            void navigator.clipboard.writeText(
-              filtered.map((r) => r.keyword).join("\n"),
-            );
-            toast.success("Keywords copied to clipboard");
-          }}
-          onCheckNow={() => {
-            if (trackedKeywordCount > 0) requestCheck(trackedKeywordCount);
-          }}
-          onRefreshMetrics={refreshMetrics}
-          metricsRefreshing={metricsRefreshing}
-          trackedKeywordCount={trackedKeywordCount}
-          checkBusy={isBusy}
-          checkDisabled={planStatus !== "paid"}
-          hasData={filtered.length > 0}
         />
 
-        {/* Filters panel */}
-        {showFilters && (
-          <FilterPanel
-            draft={filterDraft}
-            setDraft={setFilterDraft}
-            activeFilterCount={activeFilterCount}
-            onReset={() => setFilters(EMPTY_FILTERS)}
+        {search.tab ? (
+          <SerpTab
+            // Keyed so a device switch resets the tab's run pickers.
+            key={`${search.tab}-${activeDevice}`}
+            tab={search.tab}
+            projectId={projectId}
+            configId={config.id}
+            device={activeDevice}
           />
-        )}
+        ) : (
+          <>
+            {/* Portfolio overview */}
+            {(rows?.length ?? 0) > 0 && (
+              <RankTrackingOverview
+                device={activeDevice}
+                projectId={projectId}
+                configId={config.id}
+              />
+            )}
 
-        {/* Table */}
-        <div className="p-4">
-          {effectiveViewMode === "history" ? (
-            <RankTrackingHistoryMatrix
-              cells={matrixCells ?? []}
-              keywords={filtered.map((r) => ({
-                trackingKeywordId: r.trackingKeywordId,
-                keyword: r.keyword,
-              }))}
-              onClearFilters={() => setFilters(EMPTY_FILTERS)}
+            {/* Table toolbar */}
+            <RankTrackingTableToolbar
+              showFilters={showFilters}
+              onToggleFilters={() => setShowFilters((c) => !c)}
+              activeFilterCount={activeFilterCount}
+              isRunning={isRunning}
+              latestRun={latestRun}
+              keywordCount={filtered.length}
+              viewMode={effectiveViewMode}
+              onViewModeChange={(view) =>
+                onSearchChange({ view: view === "history" ? view : undefined })
+              }
+              historyAvailable={historyAvailable}
+              onExport={(action) => {
+                if (action !== "copy-list") return exportFiltered(action);
+                void navigator.clipboard.writeText(
+                  filtered.map((r) => r.keyword).join("\n"),
+                );
+                toast.success("Keywords copied to clipboard");
+              }}
+              onCheckNow={() => {
+                if (trackedKeywordCount > 0) requestCheck(trackedKeywordCount);
+              }}
+              onRefreshMetrics={refreshMetrics}
+              metricsRefreshing={metricsRefreshing}
+              trackedKeywordCount={trackedKeywordCount}
+              checkBusy={isBusy}
+              checkDisabled={planStatus !== "paid"}
+              hasData={filtered.length > 0}
             />
-          ) : (
-            <QueryState
-              query={resultsQuery}
-              errorFallback="Failed to load rank data"
-              loading={<SkeletonCard />}
-            >
-              {(results) => (
-                <RankTrackingTable
-                  key={defaultSortId}
-                  totalCount={results.rows.length}
-                  rows={filtered}
-                  pageResetKey={JSON.stringify(filters)}
-                  showDesktop={showDesktop}
-                  showMobile={showMobile}
-                  sorting={
-                    sortId
-                      ? [{ id: sortId, desc: search.order === "desc" }]
-                      : [{ id: defaultSortId, desc: false }]
-                  }
-                  onSortingChange={(sorting) => {
-                    onSearchChange({
-                      sort: rankTrackingDetailSearchSchema.shape.sort.parse(
-                        sorting[0]?.id,
-                      ),
-                      order: sorting[0]?.desc ? "desc" : undefined,
-                    });
-                  }}
-                  domain={config.domain}
-                  configId={config.id}
-                  projectId={projectId}
-                  locationCode={config.locationCode}
-                  languageCode={config.languageCode}
-                  locationName={config.locationName}
-                  serpDepth={config.serpDepth}
-                  onAddKeywords={() => setShowAddKeywords(true)}
+
+            {/* Filters panel */}
+            {showFilters && (
+              <FilterPanel
+                draft={filterDraft}
+                setDraft={setFilterDraft}
+                activeFilterCount={activeFilterCount}
+                onReset={() => setFilters(EMPTY_FILTERS)}
+              />
+            )}
+
+            {/* Table */}
+            <div className="p-4">
+              {effectiveViewMode === "history" ? (
+                <RankTrackingHistoryMatrix
+                  cells={matrixCells ?? []}
+                  keywords={filtered.map((r) => ({
+                    trackingKeywordId: r.trackingKeywordId,
+                    keyword: r.keyword,
+                  }))}
                   onClearFilters={() => setFilters(EMPTY_FILTERS)}
                 />
+              ) : (
+                <QueryState
+                  query={resultsQuery}
+                  errorFallback="Failed to load rank data"
+                  loading={<SkeletonCard />}
+                >
+                  {(results) => (
+                    <RankTrackingTable
+                      key={defaultSortId}
+                      totalCount={results.rows.length}
+                      rows={filtered}
+                      pageResetKey={JSON.stringify(filters)}
+                      showDesktop={showDesktop}
+                      showMobile={showMobile}
+                      sorting={
+                        sortId
+                          ? [{ id: sortId, desc: search.order === "desc" }]
+                          : [{ id: defaultSortId, desc: false }]
+                      }
+                      onSortingChange={(sorting) => {
+                        onSearchChange({
+                          sort: rankTrackingDetailSearchSchema.shape.sort.parse(
+                            sorting[0]?.id,
+                          ),
+                          order: sorting[0]?.desc ? "desc" : undefined,
+                        });
+                      }}
+                      domain={config.domain}
+                      configId={config.id}
+                      projectId={projectId}
+                      locationCode={config.locationCode}
+                      languageCode={config.languageCode}
+                      locationName={config.locationName}
+                      serpDepth={config.serpDepth}
+                      onAddKeywords={() => setShowAddKeywords(true)}
+                      onClearFilters={() => setFilters(EMPTY_FILTERS)}
+                    />
+                  )}
+                </QueryState>
               )}
-            </QueryState>
-          )}
-        </div>
+            </div>
+          </>
+        )}
       </div>
 
       {pendingCheck && (

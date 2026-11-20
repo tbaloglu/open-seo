@@ -3,6 +3,11 @@ import { AppError } from "@/server/lib/errors";
 import { SerpHistoryRepository } from "../repositories/SerpHistoryRepository";
 import { getChanges } from "./serpChanges";
 import {
+  getCompetitors,
+  getQuestionsAndSources,
+  listRuns,
+} from "./serpTrackerViews";
+import {
   getValidatedConfig,
   indexPages,
   pageKey,
@@ -14,7 +19,9 @@ import {
 async function findKeywordTracker(input: {
   projectId: string;
   trackerId?: string;
-  keyword: string;
+  // The keyword's text, or its id (which wins) when the caller has it.
+  keyword?: string;
+  trackingKeywordId?: string;
 }) {
   const configs = input.trackerId
     ? [await getValidatedConfig(input.trackerId, input.projectId)]
@@ -28,8 +35,13 @@ async function findKeywordTracker(input: {
         // In the tracker's language, so "TURŞU" finds "turşu" in Turkish.
         const lower = (text: string) =>
           text.trim().toLocaleLowerCase(config.languageCode);
-        const wanted = lower(input.keyword);
-        const keyword = keywords.find((row) => lower(row.keyword) === wanted);
+        const wanted = lower(input.keyword ?? "");
+        // By id when known: a match-case tracker can track "Turşu" and "turşu".
+        const keyword = keywords.find((row) =>
+          input.trackingKeywordId
+            ? row.id === input.trackingKeywordId
+            : lower(row.keyword) === wanted,
+        );
         return keyword ? [{ config, keyword }] : [];
       }),
     )
@@ -78,7 +90,8 @@ async function getKeywordHistory(input: {
   projectId: string;
   projectDefaultDevice: Device;
   trackerId?: string;
-  keyword: string;
+  keyword?: string;
+  trackingKeywordId?: string;
   device?: Device;
   runs: number;
 }) {
@@ -117,4 +130,7 @@ async function getKeywordHistory(input: {
 export const SerpHistoryService = {
   getKeywordHistory,
   getChanges,
+  listRuns,
+  getCompetitors,
+  getQuestionsAndSources,
 };

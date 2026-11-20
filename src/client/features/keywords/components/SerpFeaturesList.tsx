@@ -22,7 +22,7 @@ const CHIP_TYPES = new Set([
   "compare_sites",
 ]);
 
-function featureLabel(type: string) {
+export function featureLabel(type: string) {
   const label = FEATURE_LABELS[type] ?? type.replaceAll("_", " ");
   return label.charAt(0).toUpperCase() + label.slice(1);
 }

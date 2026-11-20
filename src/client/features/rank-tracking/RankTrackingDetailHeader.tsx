@@ -49,7 +49,8 @@ export function RankTrackingDetailHeader({
   hasBothDevices: boolean;
   activeDevice: "desktop" | "mobile";
   onActiveDeviceChange: (v: "desktop" | "mobile") => void;
-  comparePeriod: ComparePeriod;
+  /** Omitted on tabs the comparison period doesn't apply to. */
+  comparePeriod?: ComparePeriod;
   onComparePeriodChange: (v: ComparePeriod) => void;
   onEdit: () => void;
   onToggleAddKeywords: () => void;
@@ -116,30 +117,32 @@ export function RankTrackingDetailHeader({
             onChange={onActiveDeviceChange}
           />
         )}
-        <Select
-          items={COMPARE_ITEMS}
-          value={comparePeriod}
-          onValueChange={(value) => {
-            const parsed = comparePeriodSchema.safeParse(value);
-            if (parsed.success) onComparePeriodChange(parsed.data);
-          }}
-        >
-          <SelectTrigger
-            size="sm"
-            aria-label="Comparison period"
-            title="Comparison period"
-            className="text-xs"
+        {comparePeriod && (
+          <Select
+            items={COMPARE_ITEMS}
+            value={comparePeriod}
+            onValueChange={(value) => {
+              const parsed = comparePeriodSchema.safeParse(value);
+              if (parsed.success) onComparePeriodChange(parsed.data);
+            }}
           >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {COMPARE_ITEMS.map((item) => (
-              <SelectItem key={item.value} value={item.value}>
-                {item.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            <SelectTrigger
+              size="sm"
+              aria-label="Comparison period"
+              title="Comparison period"
+              className="text-xs"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {COMPARE_ITEMS.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <div className="hidden h-6 w-px bg-border sm:block" />
         <Button variant="outline" size="sm" onClick={onEdit}>
           <Settings data-icon="inline-start" />
