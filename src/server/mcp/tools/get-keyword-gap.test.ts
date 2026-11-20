@@ -8,12 +8,15 @@ const mocks = vi.hoisted(() => ({
   hasGoogleOAuthConfig: vi.fn(),
   getPerformance: vi.fn(),
   rankedKeywords: vi.fn(),
+  createDataforseoClient: vi.fn(),
+  buildCacheKey: vi.fn(),
+  getCached: vi.fn(),
 }));
 
 vi.mock("cloudflare:workers", () => ({ env: {}, waitUntil: vi.fn() }));
 vi.mock("@/server/lib/r2-cache", () => ({
-  buildCacheKey: vi.fn().mockResolvedValue("key"),
-  getCached: vi.fn().mockResolvedValue(null),
+  buildCacheKey: mocks.buildCacheKey,
+  getCached: mocks.getCached,
   setCached: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/server/features/google/oauth-config", () => ({
@@ -28,9 +31,7 @@ vi.mock("@/server/features/gsc/services/GscService", () => ({
   GscService: { getPerformance: mocks.getPerformance },
 }));
 vi.mock("@/server/lib/dataforseo", () => ({
-  createDataforseoClient: () => ({
-    domain: { rankedKeywords: mocks.rankedKeywords },
-  }),
+  createDataforseoClient: mocks.createDataforseoClient,
 }));
 
 const toolContext = makeToolContext();
@@ -59,9 +60,24 @@ function gscPage(rows: ReturnType<typeof gscRow>[]) {
   };
 }
 
-const run = () =>
+const fullGscPage = () =>
+  gscPage(
+    Array.from({ length: 25_000 }, (_, index) => gscRow(`sorgu ${index}`, 4)),
+  );
+
+function setUp(keywords: string[], ours: ReturnType<typeof gscRow>[]) {
+  mocks.rankedKeywords.mockResolvedValue({
+    items: keywords.map((keyword, index) =>
+      competitorRow(keyword, 900 - index),
+    ),
+    totalCount: keywords.length,
+  });
+  mocks.getPerformance.mockResolvedValue(gscPage(ours));
+}
+
+const run = (competitorDomain = "rakip.com") =>
   getKeywordGapTool.handler(
-    { projectId: "project_1", competitorDomain: "rakip.com" },
+    { projectId: "project_1", competitorDomain },
     toolContext,
   );
 
@@ -75,6 +91,11 @@ describe("get_keyword_gap", () => {
     mocks.hasGoogleOAuthConfig.mockResolvedValue(true);
     mocks.getPerformance.mockResolvedValue(gscPage([]));
     mocks.rankedKeywords.mockResolvedValue({ items: [], totalCount: 0 });
+    mocks.createDataforseoClient.mockReturnValue({
+      domain: { rankedKeywords: mocks.rankedKeywords },
+    });
+    mocks.buildCacheKey.mockResolvedValue("key");
+    mocks.getCached.mockResolvedValue(null);
   });
 
   it("matches Turkish queries after folding and keeps weak and missing ones as gaps", async () => {
@@ -116,17 +137,49 @@ describe("get_keyword_gap", () => {
     );
   });
 
-  it("pages through Search Console until a short page", async () => {
-    const fullPage = Array.from({ length: 25_000 }, (_, index) =>
-      gscRow(`sorgu ${index}`, 4, 1),
-    );
-    mocks.getPerformance
-      .mockResolvedValueOnce(gscPage(fullPage))
-      .mockResolvedValueOnce(gscPage([gscRow("izmir turşu", 4)]));
-    mocks.rankedKeywords.mockResolvedValue({
-      items: [competitorRow("İzmir turşu", 500)],
-      totalCount: 1,
+  it("matches a precomposed letter against its decomposed form", async () => {
+    setUp(["şeker"], [gscRow("şeker", 3)]);
+
+    const result = await run();
+
+    expect(result.structuredContent).toMatchObject({
+      counts: { matched: 1, gap: 0 },
     });
+  });
+
+  it("weights our position by impressions across folded variants", async () => {
+    setUp(
+      ["izmir turşu"],
+      [gscRow("İzmir turşu", 10, 100), gscRow("izmir  turşu", 40, 300)],
+    );
+
+    const result = await run();
+
+    expect(result.structuredContent).toMatchObject({
+      counts: { matched: 1, gap: 1 },
+      keywords: [{ ourPosition: 32.5, ourImpressions: 400, ourClicks: 4 }],
+    });
+  });
+
+  it("counts a position equal to the threshold as ranking", async () => {
+    setUp(
+      ["tam esik", "biraz kotu"],
+      [gscRow("tam esik", 20), gscRow("biraz kotu", 20.1)],
+    );
+
+    const result = await run();
+
+    expect(result.structuredContent).toMatchObject({
+      counts: { matched: 2, gap: 1 },
+      keywords: [{ keyword: "biraz kotu", ourPosition: 20.1 }],
+    });
+  });
+
+  it("pages through Search Console on page 0's dates until a short page", async () => {
+    setUp(["İzmir turşu"], []);
+    mocks.getPerformance
+      .mockResolvedValueOnce(fullGscPage())
+      .mockResolvedValueOnce(gscPage([gscRow("izmir turşu", 4)]));
 
     const result = await run();
 
@@ -139,15 +192,88 @@ describe("get_keyword_gap", () => {
         startRow: 0,
       }),
     );
-    expect(mocks.getPerformance).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ rowLimit: 25_000, startRow: 25_000 }),
-    );
+    expect(mocks.getPerformance).toHaveBeenNthCalledWith(2, {
+      projectId: "project_1",
+      dimensions: ["query"],
+      startDate: "2026-08-17",
+      endDate: "2026-11-17",
+      rowLimit: 25_000,
+      startRow: 25_000,
+      type: "web",
+    });
     expect(result.structuredContent).toMatchObject({
       counts: { matched: 1, gap: 0 },
       searchConsoleTruncated: false,
     });
   });
+
+  it("stops after four full Search Console pages and reports truncation", async () => {
+    mocks.getPerformance.mockImplementation(() =>
+      Promise.resolve(fullGscPage()),
+    );
+
+    const result = await run();
+
+    expect(mocks.getPerformance).toHaveBeenCalledTimes(4);
+    expect(result.structuredContent).toMatchObject({
+      searchConsoleTruncated: true,
+    });
+  });
+
+  it("bills the project and caches per tenant, normalized domain and request", async () => {
+    await run("https://www.Rakip.com/");
+
+    expect(mocks.createDataforseoClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: "org_123",
+        projectId: "project_1",
+      }),
+    );
+    expect(mocks.buildCacheKey).toHaveBeenCalledWith("keyword-gap:competitor", {
+      organizationId: "org_123",
+      projectId: "project_1",
+      domain: "rakip.com",
+      scope: "subdomains",
+      path: "",
+      locationCode: 2792,
+      languageCode: "tr",
+      maxRank: 30,
+      limit: 1000,
+    });
+  });
+
+  it("serves a cached competitor read without calling DataForSEO", async () => {
+    mocks.getCached.mockResolvedValue({
+      keywords: [
+        {
+          keyword: "turşu",
+          searchVolume: 100,
+          rank: 2,
+          url: null,
+          intent: null,
+        },
+      ],
+      totalCount: 1,
+    });
+
+    const result = await run();
+
+    expect(mocks.rankedKeywords).not.toHaveBeenCalled();
+    expect(result.structuredContent).toMatchObject({
+      counts: { competitorTotal: 1, gap: 1 },
+    });
+  });
+
+  it.each(["rakip.com/blog", "ftp://rakip.com", "com.tr", "not a domain"])(
+    "rejects competitor %s before reading anything",
+    async (competitorDomain) => {
+      await expect(run(competitorDomain)).rejects.toMatchObject({
+        code: "VALIDATION_ERROR",
+      });
+      expect(mocks.getPerformance).not.toHaveBeenCalled();
+      expect(mocks.rankedKeywords).not.toHaveBeenCalled();
+    },
+  );
 
   it("charges nothing when Search Console is not connected", async () => {
     mocks.getPerformance.mockRejectedValue(

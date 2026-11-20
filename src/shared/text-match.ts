@@ -11,7 +11,7 @@ export function foldedTermSource(term: string) {
     .normalize("NFD")
     .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
     .replace(/\s+/g, "\\s+")
-    .replace(/[iIı]̇?/g, "[iIı]\\u0307?");
+    .replace(/[iIı]\u0307?/g, "[iIı]\\u0307?");
 }
 
 /**
@@ -23,7 +23,7 @@ export function foldedTermSource(term: string) {
 export function foldedTermKey(term: string) {
   return term
     .normalize("NFD")
-    .replace(/[iIı]̇?/g, "i")
+    .replace(/[iIı]\u0307?/g, "i")
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();

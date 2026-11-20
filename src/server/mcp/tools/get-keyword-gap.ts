@@ -20,6 +20,7 @@ import {
 import {
   formatMcpTable,
   positionCell,
+  truncatedCell,
   type McpTableColumn,
 } from "@/server/mcp/table";
 import {
@@ -36,7 +37,7 @@ const inputSchema = {
     .min(1)
     .max(255)
     .describe(
-      "Competitor domain without protocol or www, e.g. example.com. Its subdomains are included.",
+      "Competitor domain, e.g. example.com; a protocol and www are ignored, a path is rejected. Its subdomains are included.",
     ),
   locationCode: locationCodeSchema.optional(),
   languageCode: languageCodeSchema.optional(),
@@ -95,7 +96,11 @@ const GAP_COLUMNS: McpTableColumn<GapRow>[] = [
   { header: "our impressions", value: (row) => row.ourImpressions },
   { header: "our clicks", value: (row) => row.ourClicks },
   { header: "intent", value: (row) => row.intent },
-  { header: "their url", value: (row) => row.competitorUrl },
+  {
+    header: "their url",
+    value: (row) => row.competitorUrl,
+    format: truncatedCell(120),
+  },
 ];
 
 export const getKeywordGapTool = {
@@ -103,7 +108,7 @@ export const getKeywordGapTool = {
   config: {
     title: "Get keyword gap",
     description:
-      "Find keywords a competitor ranks for where the project's site is missing or weak: the competitor's organic keywords from DataForSEO Labs (rank maxRank or better, default 30), compared with the project's Search Console queries (default last 3 months). A keyword is a gap when the site has no Search Console impressions for it or its average position is worse than positionThreshold (default 20). Matching is exact phrase after case folding (Turkish i/İ/ı/I are one letter) and whitespace normalization; no fuzzy matching. Each row has volume, the competitor's rank and URL, intent, and the site's impressions, clicks, and position (null if none), sorted by volume. Labs covers non-English long-tail queries thinly and Search Console hides rare queries, so treat the result as a topic map, not a complete list. Requires a connected Search Console property, which is read first so an unconnected project spends nothing. Costs ~15-170 credits (one Labs call billed per returned row, up to 1,000), well under the 2,000-credit confirmation threshold; cached for 12 hours. For the competitor's full keyword list, use get_ranked_keywords.",
+      "Find keywords a competitor ranks for where the project's site is missing or weak: the competitor's organic keywords from DataForSEO Labs (rank maxRank or better, default 30), compared with the project's Search Console queries (default last 3 months). A keyword is a gap when the site has no Search Console impressions for it or its average position is worse than positionThreshold (default 20). Matching is exact phrase after case folding (Turkish i/İ/ı/I are one letter) and whitespace normalization; no fuzzy matching. Each row has volume, the competitor's rank and URL, intent, and the site's impressions, clicks, and position (null if none), sorted by volume. Labs covers non-English long-tail queries thinly and Search Console hides rare queries, so treat the result as a topic map, not a complete list. Search Console is not filtered by country, while the competitor's keywords are for one country (the project's market unless locationCode is set). Requires a connected Search Console property, which is read first so an unconnected project spends nothing. Costs ~15-170 credits (one Labs call billed per returned row, up to 1,000), well under the 2,000-credit confirmation threshold; cached for 12 hours. For the competitor's full keyword list, use get_ranked_keywords.",
     inputSchema,
     outputSchema: keywordGapSchema.partial().extend({
       ok: z.boolean(),
@@ -126,12 +131,13 @@ export const getKeywordGapTool = {
     );
     if (blocked) return blocked;
 
-    const meta = buildProjectMeta(
-      context,
-      args.projectId,
-      `/p/${args.projectId}/domain`,
-      { domain: args.competitorDomain },
-    );
+    const metaFor = (domain?: string) =>
+      buildProjectMeta(
+        context,
+        args.projectId,
+        `/p/${args.projectId}/domain`,
+        domain ? { domain } : undefined,
+      );
     const connectUrl = buildConnectGscUrl(
       context.baseUrl,
       args.projectId,
@@ -163,13 +169,19 @@ export const getKeywordGapTool = {
         error instanceof GscApiError;
       if (!isGscError) throw error;
       const isNotConnected = error instanceof GscNotConnectedError;
+      const isTokenError = error instanceof GscTokenError;
+      const link = isNotConnected
+        ? ` Connect it here: ${connectUrl}`
+        : isTokenError
+          ? ` Reconnect it here: ${connectUrl}`
+          : "";
       return mcpResponse({
-        text: `${describeGscError(error)} The keyword gap compares against Search Console, so nothing was charged.${isNotConnected ? ` Connect it here: ${connectUrl}` : ""}`,
-        meta,
+        text: `${describeGscError(error)} The keyword gap compares against Search Console, so nothing was charged.${link}`,
+        meta: metaFor(),
         structuredContent: {
           ok: false,
           reason: isNotConnected ? "not_connected" : "api_error",
-          connectionRequired: isNotConnected || error instanceof GscTokenError,
+          connectionRequired: isNotConnected || isTokenError,
           connectUrl,
         },
       });
@@ -186,7 +198,7 @@ export const getKeywordGapTool = {
         ? `, showing top ${counts.returned} by volume`
         : "";
     const truncated = result.searchConsoleTruncated
-      ? ` Search Console has more than ${result.searchConsoleQueries} distinct queries; only those were compared, so some "no impressions" rows may be wrong.`
+      ? ` Search Console reached the 100,000-row limit (${result.searchConsoleQueries} distinct queries read); queries past it were not compared, so some "no impressions" rows may be wrong.`
       : "";
     const header =
       `${result.competitor} vs ${result.siteUrl} · Search Console ${result.startDate}→${result.endDate} · ` +
@@ -199,7 +211,7 @@ export const getKeywordGapTool = {
         : `${header}\nNo gap keywords.`;
     return mcpResponse({
       text,
-      meta,
+      meta: metaFor(result.competitor),
       structuredContent: { ok: true, ...result },
     });
   }),

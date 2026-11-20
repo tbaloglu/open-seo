@@ -172,7 +172,9 @@ export const rankTrackerSchema = z.looseObject({
 export type RankTrackerData = z.infer<typeof rankTrackerSchema>;
 
 export const keywordGapSchema = z.looseObject({
+  // Normalized competitor domain; always read with its subdomains.
   competitor: z.string(),
+  scope: z.string(),
   siteUrl: z.string(),
   startDate: z.string(),
   endDate: z.string(),

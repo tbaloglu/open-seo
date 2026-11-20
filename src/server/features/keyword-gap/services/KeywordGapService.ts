@@ -1,5 +1,6 @@
 import { waitUntil } from "cloudflare:workers";
 import { sortBy } from "remeda";
+import { parse as parseTld } from "tldts";
 import { z } from "zod";
 import type { BillingCustomerContext } from "@/server/billing/subscription";
 import {
@@ -7,7 +8,7 @@ import {
   type DomainRankedKeywordItem,
 } from "@/server/lib/dataforseo";
 import { buildRankedKeywordsScopeFilter } from "@/server/lib/dataforseo/researchScopeFilters";
-import { parseResearchTargetOrThrow } from "@/server/lib/domainUtils";
+import { AppError } from "@/server/lib/errors";
 import {
   assertLabsLocationCode,
   assertLanguageForLocation,
@@ -16,8 +17,12 @@ import { buildCacheKey, getCached, setCached } from "@/server/lib/r2-cache";
 import { GscService } from "@/server/features/gsc/services/GscService";
 import type { GscDateRange } from "@/server/features/gsc/searchAnalytics";
 import { resolveLabsMarket } from "@/shared/keyword-locations";
-import { foldedTermKey } from "@/shared/text-match";
 import type { KeywordGapData } from "@/shared/mcp-contracts";
+import {
+  parseResearchTarget,
+  type ResearchTarget,
+} from "@/shared/researchScope";
+import { foldedTermKey } from "@/shared/text-match";
 
 // Google's searchAnalytics page size. Four pages bound a Worker's memory; a
 // property with more distinct queries than that is reported as truncated.
@@ -44,9 +49,32 @@ const intentSchema = z.object({
   search_intent_info: z.object({ main_intent: z.string().nullish() }).nullish(),
 });
 
+/** A whole competitor domain (subdomains included): "https://www.x.com" and
+ *  "x.com" are the same; a path, another protocol, or a bare public suffix
+ *  such as "com.tr" is rejected before anything is read or charged. */
+function parseCompetitorDomain(input: string): ResearchTarget {
+  const trimmed = input.trim();
+  const invalid = (message: string) =>
+    new AppError("VALIDATION_ERROR", message);
+  if (/^[a-z][a-z\d+.-]*:/i.test(trimmed) && !/^https?:\/\//i.test(trimmed)) {
+    throw invalid("Use a domain like example.com or an http(s) URL.");
+  }
+  const parsed = parseResearchTarget(trimmed);
+  if (!parsed.ok) throw invalid(parsed.message);
+  if (parsed.target.path !== "") {
+    throw invalid(
+      "Use the competitor's domain without a path, like example.com.",
+    );
+  }
+  if (!parseTld(parsed.target.hostname, { allowPrivateDomains: true }).domain) {
+    throw invalid("Use a registrable domain like example.com.");
+  }
+  return parsed.target;
+}
+
 function toCompetitorKeyword(item: DomainRankedKeywordItem) {
   const keyword = item.keyword_data?.keyword ?? item.keyword;
-  if (!keyword) return null;
+  if (!keyword?.trim()) return null;
   const serpItem = item.ranked_serp_element?.serp_item;
   const volume = item.keyword_data?.keyword_info?.search_volume;
   const rank =
@@ -68,16 +96,15 @@ function toCompetitorKeyword(item: DomainRankedKeywordItem) {
 async function fetchCompetitorKeywords(
   input: {
     projectId: string;
-    domain: string;
+    target: ResearchTarget;
     locationCode: number;
     languageCode: string;
     maxRank: number;
     limit: number;
   },
   billingCustomer: BillingCustomerContext,
-): Promise<{ target: string; page: CompetitorPage }> {
-  const target = parseResearchTargetOrThrow(input.domain);
-  const scopeFilter = buildRankedKeywordsScopeFilter(target);
+): Promise<CompetitorPage> {
+  const { target } = input;
   const cacheKey = await buildCacheKey("keyword-gap:competitor", {
     organizationId: billingCustomer.organizationId,
     projectId: input.projectId,
@@ -90,10 +117,10 @@ async function fetchCompetitorKeywords(
     limit: input.limit,
   });
   const cached = competitorPageSchema.safeParse(await getCached(cacheKey));
-  if (cached.success) return { target: target.display, page: cached.data };
+  if (cached.success) return cached.data;
 
   const filters: unknown[] = [];
-  for (const clause of scopeFilter.clauses) {
+  for (const clause of buildRankedKeywordsScopeFilter(target).clauses) {
     if (filters.length > 0) filters.push("and");
     filters.push(clause);
   }
@@ -128,7 +155,7 @@ async function fetchCompetitorKeywords(
       console.error("keyword-gap.competitor.cache-write failed:", error);
     }),
   );
-  return { target: target.display, page };
+  return page;
 }
 
 type OurQuery = { impressions: number; clicks: number; positionSum: number };
@@ -137,26 +164,28 @@ type OurQuery = { impressions: number; clicks: number; positionSum: number };
  *  are one query; position is impression-weighted across folded variants. */
 async function fetchOurQueries(projectId: string, dateRange: GscDateRange) {
   const queries = new Map<string, OurQuery>();
+  // Page 0 resolves the window; later pages reuse its dates so a page fetched
+  // after midnight cannot read a shifted window.
+  let window: { startDate: string; endDate: string } | undefined;
   let siteUrl = "";
-  let startDate = "";
-  let endDate = "";
   let truncated = false;
   for (let page = 0; page < GSC_MAX_PAGES; page++) {
     const result = await GscService.getPerformance({
       projectId,
       dimensions: ["query"],
-      dateRange,
+      ...(window ?? { dateRange }),
       rowLimit: GSC_PAGE_SIZE,
       startRow: page * GSC_PAGE_SIZE,
       type: "web",
     });
     siteUrl = result.siteUrl;
-    startDate = result.request.startDate;
-    endDate = result.request.endDate;
+    window ??= {
+      startDate: result.request.startDate,
+      endDate: result.request.endDate,
+    };
     for (const row of result.rows) {
-      const query = row.keys?.[0];
-      if (!query) continue;
-      const key = foldedTermKey(query);
+      const key = foldedTermKey(row.keys?.[0] ?? "");
+      if (!key) continue;
       const entry = queries.get(key) ?? {
         impressions: 0,
         clicks: 0,
@@ -170,7 +199,13 @@ async function fetchOurQueries(projectId: string, dateRange: GscDateRange) {
     if (result.rows.length < GSC_PAGE_SIZE) break;
     truncated = page === GSC_MAX_PAGES - 1;
   }
-  return { queries, siteUrl, startDate, endDate, truncated };
+  return {
+    queries,
+    siteUrl,
+    startDate: window?.startDate ?? "",
+    endDate: window?.endDate ?? "",
+    truncated,
+  };
 }
 
 /**
@@ -193,6 +228,7 @@ async function getKeywordGap(
   },
   billingCustomer: BillingCustomerContext,
 ): Promise<KeywordGapData> {
+  const target = parseCompetitorDomain(input.competitorDomain);
   const market = resolveLabsMarket(
     { locationCode: input.locationCode, languageCode: input.languageCode },
     input.project,
@@ -204,7 +240,7 @@ async function getKeywordGap(
   const competitor = await fetchCompetitorKeywords(
     {
       projectId: input.projectId,
-      domain: input.competitorDomain,
+      target,
       locationCode: market.locationCode,
       languageCode: market.languageCode,
       maxRank: input.maxRank,
@@ -216,9 +252,9 @@ async function getKeywordGap(
   let matched = 0;
   const gap: KeywordGapData["keywords"] = [];
   const seen = new Set<string>();
-  for (const row of competitor.page.keywords) {
+  for (const row of competitor.keywords) {
     const key = foldedTermKey(row.keyword);
-    if (seen.has(key)) continue;
+    if (!key || seen.has(key)) continue;
     seen.add(key);
     const our = ours.queries.get(key);
     const ourPosition =
@@ -238,10 +274,15 @@ async function getKeywordGap(
       ourPosition,
     });
   }
-  const sorted = sortBy(gap, [(row) => row.searchVolume ?? -1, "desc"]);
+  const sorted = sortBy(
+    gap,
+    [(row) => row.searchVolume ?? -1, "desc"],
+    [(row) => row.competitorRank ?? Number.MAX_SAFE_INTEGER, "asc"],
+  );
 
   return {
-    competitor: competitor.target,
+    competitor: target.display,
+    scope: target.scope,
     siteUrl: ours.siteUrl,
     startDate: ours.startDate,
     endDate: ours.endDate,
@@ -251,7 +292,7 @@ async function getKeywordGap(
     positionThreshold: input.positionThreshold,
     counts: {
       competitorTotal: seen.size,
-      competitorTotalInLabs: competitor.page.totalCount,
+      competitorTotalInLabs: competitor.totalCount,
       matched,
       gap: sorted.length,
       returned: Math.min(sorted.length, input.limit),
