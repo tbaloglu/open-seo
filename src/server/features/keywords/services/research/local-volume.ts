@@ -61,7 +61,10 @@ export async function localizeResearchRows(
     { ...params, keywords: rows.map((row) => row.keyword) },
   );
   const localByKeyword = new Map(
-    mapAdsKeywordItems(items).map((local) => [local.keyword, local]),
+    mapAdsKeywordItems(items, params.languageCode).map((local) => [
+      local.keyword,
+      local,
+    ]),
   );
 
   return rows.map((row) => {

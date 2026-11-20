@@ -308,7 +308,11 @@ export async function research(
   creditFeature?: CreditFeature,
 ): Promise<ResearchResult> {
   const uniqueKeywords = [
-    ...new Set(input.keywords.map(normalizeKeyword)),
+    ...new Set(
+      input.keywords.map((keyword) =>
+        normalizeKeyword(keyword, input.languageCode),
+      ),
+    ),
   ].filter((keyword) => keyword.length > 0);
 
   if (uniqueKeywords.length === 0) {

@@ -4,6 +4,7 @@ import { AppError } from "@/server/lib/errors";
 import { isHostedServerAuthMode } from "@/server/lib/runtime-env";
 import { formatCount } from "@/shared/format";
 import { jsonCodec } from "@/shared/json";
+import { foldedTermKey } from "@/shared/text-match";
 import type {
   DeleteSavedKeywordTagInput,
   ExportSavedKeywordsInput,
@@ -90,21 +91,72 @@ async function assertCanSaveKeywords(
   );
 }
 
+/**
+ * Rows saved before language-aware lowercasing can hold "i̇stanbul" (i plus a
+ * combining dot, from "İstanbul") or, in Turkish, "isparta" (from "Isparta",
+ * now "ısparta"). An older row is the same keyword when it reads the same
+ * after dropping that dot, with any of its "i"s standing for a new "ı"; a row
+ * with "ı" never matches an "i", since Turkish "kır" and "kir" differ. Each
+ * keyword maps to such a row's text, an exact row winning, so a re-save
+ * updates the row instead of adding a near twin.
+ */
+async function matchStoredKeywords(
+  input: ResolvedSaveKeywordsInput,
+  keywords: string[],
+): Promise<Map<string, string>> {
+  const byFoldedKey = new Map<string, string[]>();
+  for (const text of await KeywordResearchRepository.listSavedKeywordTexts(
+    input,
+  )) {
+    const key = foldedTermKey(text);
+    const texts = byFoldedKey.get(key) ?? [];
+    texts.push(text);
+    byFoldedKey.set(key, texts);
+  }
+  const isOlderTwin = (stored: string, keyword: string) => {
+    const old = [...stored.normalize("NFC").replace(/i̇/g, "i")];
+    const next = [...keyword];
+    return (
+      old.length === next.length &&
+      old.every(
+        (char, i) => char === next[i] || (char === "i" && next[i] === "ı"),
+      )
+    );
+  };
+  return new Map(
+    keywords.map((keyword) => {
+      const texts = byFoldedKey.get(foldedTermKey(keyword)) ?? [];
+      const stored = texts.includes(keyword)
+        ? keyword
+        : texts.find((text) => isOlderTwin(text, keyword));
+      return [keyword, stored ?? keyword];
+    }),
+  );
+}
+
 export async function saveKeywords(
   input: ResolvedSaveKeywordsInput & { organizationId: string },
 ) {
-  const normalizedKeywords = [
+  const requestedKeywords = [
     ...new Set(
-      input.keywords.map(normalizeKeyword).filter((kw) => kw.length > 0),
+      input.keywords
+        .map((keyword) => normalizeKeyword(keyword, input.languageCode))
+        .filter((kw) => kw.length > 0),
     ),
   ];
-  await assertCanSaveKeywords(input, normalizedKeywords);
+  // Before reading the project's keywords, so a request over the limits
+  // costs no read.
+  await assertCanSaveKeywords(input, requestedKeywords);
+  const storedByKeyword = await matchStoredKeywords(input, requestedKeywords);
+  const normalizedKeywords = [...new Set(storedByKeyword.values())];
 
   const metricByKeyword = new Map(
     (input.metrics ?? [])
       .map((metric) => {
-        const keyword = normalizeKeyword(metric.keyword);
-        if (!keyword || !normalizedKeywords.includes(keyword)) return null;
+        const keyword = storedByKeyword.get(
+          normalizeKeyword(metric.keyword, input.languageCode),
+        );
+        if (!keyword) return null;
         return [keyword, metric] as const;
       })
       .filter(

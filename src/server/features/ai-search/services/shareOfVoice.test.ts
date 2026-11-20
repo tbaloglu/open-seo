@@ -63,4 +63,10 @@ describe("resolveCompetitorGroups", () => {
 
     expect(groups.map((g) => g.label)).toEqual(["Adidas", "puma.com"]);
   });
+
+  it("treats Turkish i-letters as one letter", () => {
+    const groups = resolveCompetitorGroups("İşbank", ["işbank", "IŞBANK"]);
+
+    expect(groups).toEqual([]);
+  });
 });

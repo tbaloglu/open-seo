@@ -222,4 +222,33 @@ describe("fetchKeywordMetricsForList", () => {
       keywordDifficulty: null,
     });
   });
+
+  it("matches echoed Turkish keywords to the requested ones", async () => {
+    // DataForSEO echoes keywords lower-cased the Turkish way.
+    const adsSearchVolume = vi
+      .fn()
+      .mockResolvedValue([{ keyword: "ısparta otel", search_volume: 90 }]);
+    const keywordOverview = vi.fn().mockResolvedValue([
+      {
+        keyword: "ısparta otel",
+        keyword_properties: { keyword_difficulty: 12 },
+      },
+    ]);
+
+    const rows = await fetchKeywordMetricsForList(
+      fakeClient({ adsSearchVolume, keywordOverview }),
+      {
+        keywords: ["ISPARTA Otel"],
+        locationCode: 2792,
+        languageCode: "tr",
+        locationName: "Isparta,Isparta,Turkey",
+        creditFeature: "keyword_research",
+      },
+    );
+
+    // One row with both sources, not a second empty row for "ISPARTA Otel".
+    expect(rows).toEqual([
+      expect.objectContaining({ searchVolume: 90, keywordDifficulty: 12 }),
+    ]);
+  });
 });

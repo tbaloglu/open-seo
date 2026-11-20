@@ -1,3 +1,4 @@
+import { lowercaseKeyword } from "@/shared/text-match";
 import { RankTrackingRepository } from "@/server/features/rank-tracking/repositories/RankTrackingRepository";
 import { AppError } from "@/server/lib/errors";
 import { SerpHistoryRepository } from "../repositories/SerpHistoryRepository";
@@ -34,7 +35,7 @@ async function findKeywordTracker(input: {
         );
         // In the tracker's language, so "TURŞU" finds "turşu" in Turkish.
         const lower = (text: string) =>
-          text.trim().toLocaleLowerCase(config.languageCode);
+          lowercaseKeyword(text.trim(), config.languageCode);
         const wanted = lower(input.keyword ?? "");
         // By id when known: a match-case tracker can track "Turşu" and "turşu".
         const keyword = keywords.find((row) =>

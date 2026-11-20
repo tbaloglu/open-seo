@@ -17,6 +17,7 @@ import {
   parseCompetitorList,
 } from "@/types/schemas/ai-search";
 import { detectTarget } from "@/shared/targetDetection";
+import { foldedTermKey } from "@/shared/text-match";
 import {
   parseResearchTarget,
   RESEARCH_SCOPE_LABELS,
@@ -165,10 +166,11 @@ export function BrandLookupPage({
       });
       return;
     }
-    const targetValue = detectTarget(trimmed).value.toLowerCase();
+    // Folded like the server's dedupe, so "İşbank" matches "işbank".
+    const targetValue = foldedTermKey(detectTarget(trimmed).value);
     const matchesTarget = competitors.find(
       (competitor) =>
-        detectTarget(competitor).value.toLowerCase() === targetValue,
+        foldedTermKey(detectTarget(competitor).value) === targetValue,
     );
     if (matchesTarget) {
       setValidationError({

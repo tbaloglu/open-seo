@@ -27,7 +27,10 @@ type FetchResearchRowsParams = {
   creditFeature?: CreditFeature;
 };
 
-function mapKeywordDataItems(items: LabsKeywordDataItem[]): EnrichedKeyword[] {
+function mapKeywordDataItems(
+  items: LabsKeywordDataItem[],
+  languageCode: string,
+): EnrichedKeyword[] {
   const rows: EnrichedKeyword[] = [];
   const seen = new Set<string>();
 
@@ -35,7 +38,7 @@ function mapKeywordDataItems(items: LabsKeywordDataItem[]): EnrichedKeyword[] {
     const keyword = item.keyword;
     if (!keyword) continue;
 
-    const normalized = normalizeKeyword(keyword);
+    const normalized = normalizeKeyword(keyword, languageCode);
     if (seen.has(normalized)) continue;
     seen.add(normalized);
 
@@ -70,6 +73,7 @@ function mapKeywordDataItems(items: LabsKeywordDataItem[]): EnrichedKeyword[] {
  */
 export function mapAdsKeywordItems(
   items: AdsKeywordIdeaItem[],
+  languageCode: string,
 ): EnrichedKeyword[] {
   const rows: EnrichedKeyword[] = [];
   const seen = new Set<string>();
@@ -78,7 +82,7 @@ export function mapAdsKeywordItems(
     const keyword = item.keyword;
     if (!keyword) continue;
 
-    const normalized = normalizeKeyword(keyword);
+    const normalized = normalizeKeyword(keyword, languageCode);
     if (seen.has(normalized)) continue;
     seen.add(normalized);
 
@@ -115,6 +119,7 @@ export async function fetchGoogleAdsResearchRows(
       limit: params.resultLimit,
       creditFeature: params.creditFeature,
     }),
+    params.languageCode,
   );
 }
 
@@ -139,6 +144,7 @@ async function fetchRelatedRows(
     items
       .map((item) => item.keyword_data)
       .filter((data): data is NonNullable<typeof data> => data != null),
+    params.languageCode,
   );
 }
 
@@ -164,6 +170,7 @@ export async function fetchResearchRowsBySource(
         filters: params.filters,
         creditFeature: params.creditFeature,
       }),
+      params.languageCode,
     );
   }
 
@@ -177,5 +184,6 @@ export async function fetchResearchRowsBySource(
       ignoreSynonyms: params.ignoreSynonyms,
       creditFeature: params.creditFeature,
     }),
+    params.languageCode,
   );
 }

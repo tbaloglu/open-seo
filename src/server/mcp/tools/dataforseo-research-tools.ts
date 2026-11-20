@@ -30,6 +30,7 @@ import {
   resolveBusinessIdentifier,
 } from "@/server/mcp/tools/local-seo-shared";
 import { resolveLabsMarket, resolveMarket } from "@/shared/keyword-locations";
+import { lowercaseKeyword } from "@/shared/text-match";
 import {
   assertLabsLocationCode,
   assertLanguageForLocation,
@@ -1199,8 +1200,11 @@ export const getKeywordMetricsTool = {
     );
 
     const missingCount =
-      new Set(args.keywords.map((keyword) => keyword.trim().toLowerCase()))
-        .size - rows.length;
+      new Set(
+        args.keywords.map((keyword) =>
+          lowercaseKeyword(keyword.trim(), languageCode),
+        ),
+      ).size - rows.length;
     const header =
       `Fetched metrics for ${rows.length} keywords. Columns: volume = monthly searches, trend = search volume for the last 3 months, oldest → newest, KD = keyword difficulty (0-100), CPC in USD, competition = paid competition (0-1); "—" = unavailable.` +
       (missingCount > 0

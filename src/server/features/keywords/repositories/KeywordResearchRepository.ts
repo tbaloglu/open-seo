@@ -18,6 +18,7 @@ import {
   savedKeywordTagAssignments,
   savedKeywords,
 } from "@/db/schema";
+import { lowercaseKeyword } from "@/shared/text-match";
 import {
   SavedKeywordTagsRepository,
   type SavedKeywordTagRecord,
@@ -145,6 +146,16 @@ function escapeLike(value: string) {
   return value.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
+// Text filters read every i-letter as "i": Turkish writes "ısparta" where
+// other languages write "isparta", and rows saved before language-aware
+// lowercasing can hold "i̇" (i + U+0307). Both constants are fixed, so they go
+// in as literals and cost no bound parameters.
+const foldedSavedKeyword = sql`replace(replace(lower(${savedKeywords.keyword}), ${sql.raw("'ı'")}, 'i'), ${sql.raw("'̇'")}, '')`;
+
+function foldedContainsPattern(term: string) {
+  return `%${escapeLike(lowercaseKeyword(term, "en").replace(/ı/g, "i"))}%`;
+}
+
 function buildSavedKeywordWhere(params: {
   projectId: string;
   search?: string;
@@ -162,21 +173,21 @@ function buildSavedKeywordWhere(params: {
   const search = params.search?.trim();
   if (search) {
     clauses.push(
-      sql`lower(${savedKeywords.keyword}) like ${`%${escapeLike(search.toLocaleLowerCase())}%`} escape '\\'`,
+      sql`${foldedSavedKeyword} like ${foldedContainsPattern(search)} escape '\\'`,
     );
   }
   for (const term of params.includeTerms ?? []) {
     const trimmed = term.trim();
     if (!trimmed) continue;
     clauses.push(
-      sql`lower(${savedKeywords.keyword}) like ${`%${escapeLike(trimmed.toLocaleLowerCase())}%`} escape '\\'`,
+      sql`${foldedSavedKeyword} like ${foldedContainsPattern(trimmed)} escape '\\'`,
     );
   }
   for (const term of params.excludeTerms ?? []) {
     const trimmed = term.trim();
     if (!trimmed) continue;
     clauses.push(
-      sql`lower(${savedKeywords.keyword}) not like ${`%${escapeLike(trimmed.toLocaleLowerCase())}%`} escape '\\'`,
+      sql`${foldedSavedKeyword} not like ${foldedContainsPattern(trimmed)} escape '\\'`,
     );
   }
   if (params.minVolume != null) {
@@ -348,6 +359,25 @@ async function listSavedKeywordRowsByKeywords(params: {
   return rows;
 }
 
+/** Every saved keyword's text in one project market. */
+async function listSavedKeywordTexts(params: {
+  projectId: string;
+  locationCode: number;
+  languageCode: string;
+}) {
+  const rows = await db
+    .select({ keyword: savedKeywords.keyword })
+    .from(savedKeywords)
+    .where(
+      and(
+        eq(savedKeywords.projectId, params.projectId),
+        eq(savedKeywords.locationCode, params.locationCode),
+        eq(savedKeywords.languageCode, params.languageCode),
+      ),
+    );
+  return rows.map((row) => row.keyword);
+}
+
 // D1 caps bound parameters at 100 per statement; leave headroom for the
 // projectId filter.
 const QUERY_CHUNK_SIZE = 80;
@@ -380,6 +410,7 @@ export const KeywordResearchRepository = {
   saveKeywordsToProject,
   countSavedKeywordsForOrganization,
   listSavedKeywordRowsByKeywords,
+  listSavedKeywordTexts,
   listSavedKeywordsByProject,
   addTagsToSavedKeywords: SavedKeywordTagsRepository.addTagsToSavedKeywords,
   replaceTagsForSavedKeywords:

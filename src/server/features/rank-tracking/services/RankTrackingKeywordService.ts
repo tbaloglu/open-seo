@@ -1,3 +1,4 @@
+import { lowercaseKeyword } from "@/shared/text-match";
 import { RankTrackingRepository } from "@/server/features/rank-tracking/repositories/RankTrackingRepository";
 import type { rankTrackingKeywords } from "@/db/schema";
 import { getPaidPlanId } from "@/server/billing/subscription";
@@ -52,7 +53,7 @@ async function addKeywords(
     // become "istanbul" and "kırmızı", not different words.
     const normalized = matchCase
       ? trimmed
-      : trimmed.toLocaleLowerCase(config.languageCode);
+      : lowercaseKeyword(trimmed, config.languageCode);
     if (
       normalized &&
       !seen.has(normalized) &&

@@ -1,6 +1,7 @@
 import { ReportTemplateRepository } from "@/server/features/reports/repositories/ReportTemplateRepository";
 import { AppError } from "@/server/lib/errors";
 import { formatCount } from "@/shared/format";
+import { foldedTermKey } from "@/shared/text-match";
 import {
   REPORT_TEMPLATE_MAX_DESCRIPTION_CHARS,
   REPORT_TEMPLATE_MAX_INSTRUCTIONS_CHARS,
@@ -119,11 +120,13 @@ async function saveReportTemplate(params: SaveParams): Promise<{
   }
 
   // A name that appears twice in a project makes "use the monthly check-in
-  // template" ambiguous, so a rename clears the same bar as a create.
-  const lowerName = name.toLowerCase();
+  // template" ambiguous, so a rename clears the same bar as a create. Folded,
+  // so "İç rapor" and "iç rapor" clash too.
+  const lowerName = foldedTermKey(name);
   const clash = templates.find(
     (template) =>
-      template.name.toLowerCase() === lowerName && template.id !== existing?.id,
+      foldedTermKey(template.name) === lowerName &&
+      template.id !== existing?.id,
   );
   if (clash) {
     throw new AppError(

@@ -99,6 +99,38 @@ const modelResponse = (webSearch: boolean): LlmResponseResult => ({
   ],
 });
 
+describe("explorePrompt brand highlight", () => {
+  it("finds a Turkish brand whatever its i-letters", async () => {
+    llmResponse.mockResolvedValueOnce({
+      ...modelResponse(false),
+      items: [
+        {
+          type: "message",
+          sections: [
+            {
+              type: "text",
+              text: "En uygun kredi IŞBANK'ta.",
+              annotations: [],
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = await explorePrompt(
+      {
+        projectId: "p1",
+        prompt: "en uygun kredi",
+        models: ["chat_gpt"],
+        highlightBrand: "İşbank",
+      },
+      { organizationId: "org_1", userId: "user_1", userEmail: "a@b.c" },
+    );
+
+    expect(result.results[0]).toMatchObject({ brandMentioned: true });
+  });
+});
+
 describe("explorePrompt web-search retry", () => {
   const input = {
     projectId: "p1",
