@@ -6,12 +6,25 @@ import { foldedTermKey } from "@/shared/text-match";
 // with this schema and dedupe with dedupeTopicWords, so every writer stores the
 // same list for the same input.
 
-export const TOPIC_WORD_MAX_CHARS = 40;
+const TOPIC_WORD_MAX_CHARS = 40;
 export const TOPIC_WORDS_MAX = 50;
 
-export const topicWordsSchema = z
-  .array(z.string().trim().min(1).max(TOPIC_WORD_MAX_CHARS))
-  .max(TOPIC_WORDS_MAX);
+/** The rule in words, for form errors and the MCP tool description. */
+export const TOPIC_WORDS_RULE = `Up to ${TOPIC_WORDS_MAX} words of 1-${TOPIC_WORD_MAX_CHARS} characters each. A word can't contain a comma, a plus sign or a line break: the topic filter reads those as separators.`;
+
+const topicWordSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(TOPIC_WORD_MAX_CHARS)
+  .regex(/^[^,+\r\n]+$/, "A topic word can't contain , + or a line break.");
+
+export const topicWordsSchema = z.array(topicWordSchema).max(TOPIC_WORDS_MAX);
+
+/** Whether one word passes topicWordsSchema's per-word rule. */
+export function isValidTopicWord(word: string) {
+  return topicWordSchema.safeParse(word).success;
+}
 
 /**
  * Trimmed, without empty entries, and one entry per word under Turkish-aware
@@ -34,4 +47,9 @@ export function dedupeTopicWords(words: string[]): string[] {
  */
 export function splitTopicWords(value: string): string[] {
   return dedupeTopicWords(value.split(/[,+]/));
+}
+
+/** Same words in the same order. */
+export function sameTopicWords(a: readonly string[], b: readonly string[]) {
+  return a.length === b.length && a.every((word, index) => word === b[index]);
 }

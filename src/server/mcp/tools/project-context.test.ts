@@ -4,6 +4,7 @@ import {
   updateProjectContextTool,
 } from "./project-context";
 import { makeToolContext, textContent } from "./tool-test-support";
+import { updateProjectContextSchema } from "@/types/schemas/projectContext";
 
 // The repository is the seam, not the service: the tool's contract is that an
 // MCP write reaches storage attributed to MCP and reads back as the same digest
@@ -140,6 +141,20 @@ describe("update_project_context", () => {
       "project_1",
       ["Turşu", "kavanoz"],
     );
+  });
+
+  // The topic filter splits on commas and plus signs, so a stored "c++"
+  // would come back from the field as "c" and be written over.
+  it("rejects topic words the filter would split, and says how to set them", () => {
+    for (const word of ["c++", "a,b", "a\nb"]) {
+      expect(
+        updateProjectContextSchema.safeParse({
+          projectId: "project_1",
+          updates: [{ topicWords: [word] }],
+        }).success,
+      ).toBe(false);
+    }
+    expect(updateProjectContextTool.config.description).toContain("topicWords");
   });
 });
 

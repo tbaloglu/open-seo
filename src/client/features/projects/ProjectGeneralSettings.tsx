@@ -23,7 +23,11 @@ import { toastInitialAudit } from "@/client/features/projects/initialAuditToast"
 import { archiveProject, updateProject } from "@/serverFunctions/projects";
 import { setTopicWords } from "@/serverFunctions/topic-words";
 import { topicWordsQueryOptions } from "@/client/features/keywords/hooks/useProjectTopicWords";
-import { splitTopicWords, topicWordsSchema } from "@/shared/topic-words";
+import {
+  splitTopicWords,
+  TOPIC_WORDS_RULE,
+  topicWordsSchema,
+} from "@/shared/topic-words";
 import { isEveryAppClientAuthMode } from "@/lib/auth-mode";
 import { isDefaultProjectName } from "@/shared/ai-visibility";
 import type { ProjectSummary } from "./types";
@@ -231,7 +235,7 @@ const topicWordsFormSchema = z.object({
     .string()
     .refine(
       (value) => topicWordsSchema.safeParse(splitTopicWords(value)).success,
-      "Use up to 50 words of at most 40 characters each.",
+      TOPIC_WORDS_RULE,
     ),
 });
 
@@ -274,7 +278,7 @@ function TopicWordsForm({
           {(field) => (
             <field.TextField
               label="Keyword research topic words"
-              description="Comma-separated. Keyword research shows only keywords with a word starting with one of these. Case and Turkish i/ı/İ spellings count as the same word."
+              description="Comma-separated. Keyword research starts its Topic Words filter from these, showing only keywords with a word that starts with one of them. Case and Turkish i/ı/İ spellings count as the same word."
               placeholder="pickle, brine, jar"
             />
           )}

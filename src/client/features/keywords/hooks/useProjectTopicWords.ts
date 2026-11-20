@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useStore } from "@tanstack/react-form";
 import {
   queryOptions,
@@ -6,43 +6,58 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   clearLegacyTopics,
   readLegacyTopics,
   type useLocalKeywordFilters,
 } from "@/client/features/keywords/hooks/useLocalKeywordFilters";
-import { getTopicWords, setTopicWords } from "@/serverFunctions/topic-words";
 import {
-  splitTopicWords,
-  TOPIC_WORD_MAX_CHARS,
-  TOPIC_WORDS_MAX,
-} from "@/shared/topic-words";
+  planLegacyTopicUpload,
+  syncTopicField,
+  topicDraftState,
+} from "@/client/features/keywords/topicWordsDraft";
+import { getTopicWords, setTopicWords } from "@/serverFunctions/topic-words";
 
 export const topicWordsQueryOptions = (projectId: string) =>
   queryOptions({
     queryKey: ["topicWords", projectId],
     queryFn: () => getTopicWords({ data: { projectId } }),
+    // Nothing writes in the background, so a fresh read can only help: an
+    // agent or another tab may have changed the list.
+    staleTime: 0,
   });
-
-// Long enough to save once the user stops typing, not on every keystroke.
-const SAVE_DELAY_MS = 800;
 
 type FiltersForm = ReturnType<typeof useLocalKeywordFilters>["filtersForm"];
 
+function migrationKey(projectId: string) {
+  return `keyword-topic-words-migrated:${projectId}`;
+}
+
+/** Marks the one-time upload as tried; false when it was tried before. */
+function claimLegacyMigration(projectId: string) {
+  try {
+    if (localStorage.getItem(migrationKey(projectId))) return false;
+    localStorage.setItem(migrationKey(projectId), "1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * The research page's "Topic Words (any)" field is the project's saved list:
- * it starts from the server's words, and an edit is saved back once typing
- * stops. Topic words this browser kept before they moved to the server are
- * uploaded once, when the project has none yet.
+ * The research page's "Topic Words (any)" field starts from the project's
+ * saved list and then filters only the current view. The list changes only
+ * when the user presses save. Topic words this browser kept before they moved
+ * to the server are uploaded once, when the project has none yet.
  */
 export function useProjectTopicWords(projectId: string, form: FiltersForm) {
   const queryClient = useQueryClient();
   const query = useQuery(topicWordsQueryOptions(projectId));
   const saved = query.data;
   const topics = useStore(form.store, (state) => state.values.topics);
-  // The project whose words are in the field. Saving waits for it, so the
-  // empty field before the first load never overwrites the saved list.
-  const loadedFor = useRef<string | null>(null);
+  // The text the field last took from the server, per project.
+  const synced = useRef<{ projectId: string; text: string } | null>(null);
 
   const mutation = useMutation({
     mutationFn: (words: string[]) =>
@@ -53,33 +68,54 @@ export function useProjectTopicWords(projectId: string, form: FiltersForm) {
         words,
       ),
   });
-  const { mutate: save } = mutation;
+  const { mutate } = mutation;
 
   useEffect(() => {
-    if (!saved || loadedFor.current === projectId) return;
-    loadedFor.current = projectId;
-    const legacy = readLegacyTopics(projectId);
-    if (saved.length > 0 || legacy.trim() === "") {
-      if (legacy) clearLegacyTopics(projectId);
-      form.setFieldValue("topics", saved.join(", "));
-      return;
+    if (!saved) return;
+    const firstSync = synced.current?.projectId !== projectId;
+    const next = syncTopicField({
+      current: form.state.values.topics,
+      synced: firstSync ? null : (synced.current?.text ?? null),
+      saved,
+    });
+    if (next.fieldText !== null) form.setFieldValue("topics", next.fieldText);
+    synced.current =
+      next.synced === null ? null : { projectId, text: next.synced };
+    if (!firstSync) return;
+
+    const legacy = planLegacyTopicUpload(readLegacyTopics(projectId), saved);
+    if (legacy.kind === "clear") clearLegacyTopics(projectId);
+    if (legacy.kind === "upload" && claimLegacyMigration(projectId)) {
+      const text = legacy.words.join(", ");
+      form.setFieldValue("topics", text);
+      synced.current = { projectId, text };
+      mutate(legacy.words, { onSuccess: () => clearLegacyTopics(projectId) });
     }
-    // Trimmed to what the server accepts, so the one-time upload cannot fail
-    // validation and be retried on every visit.
-    const words = splitTopicWords(legacy)
-      .filter((word) => word.length <= TOPIC_WORD_MAX_CHARS)
-      .slice(0, TOPIC_WORDS_MAX);
-    form.setFieldValue("topics", words.join(", "));
-    save(words, { onSuccess: () => clearLegacyTopics(projectId) });
-  }, [form, projectId, save, saved]);
+  }, [form, mutate, projectId, saved]);
 
-  useEffect(() => {
-    if (!saved || loadedFor.current !== projectId) return;
-    // Read from the form, not `topics`: in the render that loaded the saved
-    // words, `topics` still holds the empty value from before.
-    const words = splitTopicWords(form.state.values.topics);
-    if (words.join("\n") === saved.join("\n")) return;
-    const timer = setTimeout(() => save(words), SAVE_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [form, projectId, save, saved, topics]);
+  const draft = topicDraftState(topics, saved ?? []);
+
+  const save = useCallback(() => {
+    if (!draft.canSave || mutation.isPending) return;
+    mutate(draft.words, {
+      onSuccess: () => toast.success("Topic words saved for this project"),
+    });
+  }, [draft.canSave, draft.words, mutate, mutation.isPending]);
+
+  const resetToSaved = useCallback(() => {
+    if (!saved) return;
+    const text = saved.join(", ");
+    form.setFieldValue("topics", text);
+    synced.current = { projectId, text };
+  }, [form, projectId, saved]);
+
+  return {
+    loaded: saved !== undefined,
+    valid: draft.valid,
+    differs: saved !== undefined && draft.differs,
+    canSave: saved !== undefined && draft.canSave && !mutation.isPending,
+    isSaving: mutation.isPending,
+    save,
+    resetToSaved,
+  };
 }

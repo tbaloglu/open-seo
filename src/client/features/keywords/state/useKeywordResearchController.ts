@@ -81,7 +81,7 @@ export function useKeywordResearchController(
     values: filterValues,
     resetFilters,
   } = useLocalKeywordFilters(input.projectId);
-  useProjectTopicWords(input.projectId, filtersForm);
+  const topicWords = useProjectTopicWords(input.projectId, filtersForm);
   const uiState = useKeywordUiState(
     Object.values(filterValues).some((v) => v.trim() !== ""),
   );
@@ -274,6 +274,7 @@ export function useKeywordResearchController(
     setPreferredGroupKeywords,
     activeFilterCount,
     topicHiddenCount,
+    topicWords,
     activeSerpKeyword,
     confirmSave,
     controlsForm,
