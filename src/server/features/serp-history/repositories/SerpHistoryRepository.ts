@@ -255,6 +255,21 @@ async function getPages(input: {
   return { results, features };
 }
 
+/** Which of the runs have a saved page on the device. */
+async function getSavedRunIds(runIds: string[], device: Device) {
+  if (runIds.length === 0) return [];
+  const rows = await db
+    .selectDistinct({ runId: serpSnapshotResults.runId })
+    .from(serpSnapshotResults)
+    .where(
+      and(
+        inArray(serpSnapshotResults.runId, runIds),
+        eq(serpSnapshotResults.device, device),
+      ),
+    );
+  return rows.map((row) => row.runId);
+}
+
 export const SerpHistoryRepository = {
   replacePages,
   deletePages,
@@ -263,4 +278,5 @@ export const SerpHistoryRepository = {
   getKeywordChecks,
   getSnapshots,
   getPages,
+  getSavedRunIds,
 };

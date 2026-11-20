@@ -272,3 +272,81 @@ describe("SERP history", () => {
     await expect(history(input)).rejects.toMatchObject({ code });
   });
 });
+
+const tracker = (trackerId: string) => ({
+  projectId: "project",
+  projectDefaultDevice: "mobile" as const,
+  trackerId,
+});
+
+describe("SERP tracker views", () => {
+  it("counts each domain's top-10 keywords per saved check and marks who entered or left", async () => {
+    const result = await SerpHistoryService.getCompetitors({
+      ...tracker("config"),
+      runs: 6,
+    });
+
+    expect(result.runs.map((row) => [row.id, row.keywords])).toEqual([
+      ["first", 1],
+      ["second", 2],
+      ["latest", 2],
+    ]);
+    expect(
+      result.domains.map((row) => [row.domain, row.counts, row.status]),
+    ).toEqual([
+      ["c.com", [0, 1, 1], null],
+      ["e.com", [0, 1, 1], null],
+      ["d.com", [0, 0, 1], "entered"],
+      ["a.com", [1, 1, 0], "left"],
+      ["b.com", [1, 0, 0], null],
+    ]);
+  });
+
+  it("lists the latest check's questions and AI Overview sources with their keywords", async () => {
+    const result = await SerpHistoryService.getQuestionsAndSources(
+      tracker("config"),
+    );
+
+    expect(result.run?.id).toBe("latest");
+    expect(result.keywords).toBe(2);
+    expect(result.questions).toEqual([
+      { value: "q2", keywords: ["kw"] },
+      { value: "q3", keywords: ["kw"] },
+    ]);
+    expect(result.sources).toEqual([
+      { value: "openseo.so", keywords: ["kw"], own: true },
+    ]);
+  });
+
+  it("shows checks from before SERP history as not saved", async () => {
+    const runs = await SerpHistoryService.listRuns(tracker("one"));
+    const competitors = await SerpHistoryService.getCompetitors({
+      ...tracker("one"),
+      runs: 6,
+    });
+    const questions = await SerpHistoryService.getQuestionsAndSources(
+      tracker("one"),
+    );
+
+    expect(runs.runs.map((row) => [row.id, row.saved])).toEqual([
+      ["one-a", false],
+    ]);
+    expect(competitors).toMatchObject({ runs: [], unsavedRuns: 1 });
+    expect(questions.run?.saved).toBe(false);
+  });
+
+  it.each([
+    ["runs", () => SerpHistoryService.listRuns(tracker("elsewhere"))],
+    [
+      "competitors",
+      () =>
+        SerpHistoryService.getCompetitors({ ...tracker("elsewhere"), runs: 6 }),
+    ],
+    [
+      "questions and sources",
+      () => SerpHistoryService.getQuestionsAndSources(tracker("elsewhere")),
+    ],
+  ])("rejects another project's tracker for %s", async (_view, read) => {
+    await expect(read()).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+});
