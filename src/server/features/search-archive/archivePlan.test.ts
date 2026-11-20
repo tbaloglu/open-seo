@@ -50,6 +50,7 @@ describe("daily plan", () => {
       source: "gsc_page",
       mode: "incremental",
       today: "2026-11-20",
+      timeZone: "UTC",
       periods: [
         period("2026-09", "2026-09-30", "2026-10-10T00:00:00Z", true),
         period("2026-10", "2026-10-31", "2026-11-10T00:00:00Z", true),
@@ -67,11 +68,29 @@ describe("daily plan", () => {
     });
   });
 
+  it("reads the last fetch time in the source's time zone", () => {
+    // 05:00 UTC on Nov 15 is still Nov 14 in Pacific Time, so only days
+    // through Nov 10 were final then.
+    const [fetch] = planDailyFetches({
+      source: "gsc_page",
+      mode: "incremental",
+      today: "2026-11-20",
+      timeZone: "America/Los_Angeles",
+      periods: [
+        period("2026-09", "2026-09-30", "2026-10-10T00:00:00Z", true),
+        period("2026-10", "2026-10-31", "2026-11-10T00:00:00Z", true),
+        period("2026-11", "2026-11-14", "2026-11-15T05:00:00Z"),
+      ],
+    });
+    expect(fetch.startDate).toBe("2026-11-11");
+  });
+
   it("marks a month complete only when all of it is older than 4 days", () => {
     const fetches = planDailyFetches({
       source: "gsc_site",
       mode: "incremental",
       today: "2026-11-03",
+      timeZone: "UTC",
       periods: [period("2026-09", "2026-09-30", "2026-10-05", true)],
     });
     expect(fetches.map(({ month, complete }) => ({ month, complete }))).toEqual(
@@ -85,6 +104,7 @@ describe("daily plan", () => {
         source: "gsc_site",
         mode: "incremental",
         today: "2026-11-04",
+        timeZone: "UTC",
         periods: [period("2026-09", "2026-09-30", "2026-10-05", true)],
       })[0],
     ).toMatchObject({ month: "2026-10", complete: true });
@@ -95,6 +115,7 @@ describe("daily plan", () => {
       source: "ga4_site",
       mode: "backfill",
       today: "2026-11-20",
+      timeZone: "UTC",
       periods: [
         period("2025-07", "2025-07-31", "2026-11-19", true),
         period("2025-08", "2025-08-31", "2026-11-19", true),

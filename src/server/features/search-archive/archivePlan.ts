@@ -1,3 +1,5 @@
+import { ga4DateInTimeZone } from "@/server/features/ga4/services/Ga4Dates";
+
 // Which months the search archive job fetches, and from which day. Pure date
 // math over YYYY-MM-DD strings, so the rules are testable without Google.
 
@@ -18,6 +20,8 @@ export type ArchiveMode = "backfill" | "incremental";
 const REVISION_DAYS = 4;
 /** GSC keeps 16 months; GA4 is capped at the same window. */
 const ARCHIVE_WINDOW_MONTHS = 16;
+/** Search Console reports days, and drops them, in Pacific Time. */
+export const GSC_TIME_ZONE = "America/Los_Angeles";
 /** Incremental runs look at the current month and the two before it. */
 const INCREMENTAL_MONTHS = 3;
 
@@ -100,9 +104,11 @@ export function planDailyFetches(params: {
   mode: ArchiveMode;
   /** Today in the source's time zone. */
   today: string;
+  /** The source's time zone, which `fetchedAt` (UTC) is read in. */
+  timeZone: string;
   periods: ArchivePeriodState[];
 }): ArchiveFetch[] {
-  const { source, mode, today } = params;
+  const { source, mode, today, timeZone } = params;
   const floor = archiveFloor(today);
   const lastDay = addDays(today, -1);
   const finalThrough = addDays(today, -REVISION_DAYS);
@@ -121,7 +127,7 @@ export function planDailyFetches(params: {
     if (period) {
       // Days read at least REVISION_DAYS after they happened are final.
       const finalAtFetch = addDays(
-        period.fetchedAt.slice(0, 10),
+        ga4DateInTimeZone(new Date(period.fetchedAt), timeZone),
         -REVISION_DAYS,
       );
       const resume = addDays(

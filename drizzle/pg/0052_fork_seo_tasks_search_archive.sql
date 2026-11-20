@@ -107,5 +107,9 @@ ALTER TABLE "search_archive_runs" ADD CONSTRAINT "search_archive_runs_project_id
 ALTER TABLE "seo_task_urls" ADD CONSTRAINT "seo_task_urls_task_id_seo_tasks_id_fk" FOREIGN KEY ("task_id") REFERENCES "public"."seo_tasks"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "seo_tasks" ADD CONSTRAINT "seo_tasks_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "seo_tasks" ADD CONSTRAINT "seo_tasks_source_report_id_reports_id_fk" FOREIGN KEY ("source_report_id") REFERENCES "public"."reports"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "ga4_daily_page_page_idx" ON "ga4_daily_page" USING btree ("project_id","page_path","date");--> statement-breakpoint
+CREATE INDEX "gsc_daily_page_page_idx" ON "gsc_daily_page" USING btree ("project_id","page","date");--> statement-breakpoint
+CREATE INDEX "gsc_monthly_query_page_page_idx" ON "gsc_monthly_query_page" USING btree ("project_id","page","month");--> statement-breakpoint
+CREATE INDEX "gsc_monthly_query_page_query_idx" ON "gsc_monthly_query_page" USING btree ("project_id","query","month");--> statement-breakpoint
 CREATE UNIQUE INDEX "seo_tasks_project_code_idx" ON "seo_tasks" USING btree ("project_id","code");--> statement-breakpoint
 CREATE INDEX "seo_tasks_project_status_idx" ON "seo_tasks" USING btree ("project_id","status");

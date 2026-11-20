@@ -24,11 +24,20 @@ import {
 // string; mapWith(Number) gives both dialects the same number.
 const sumOf = (column: SQLWrapper) =>
   sql<number>`coalesce(sum(${column}), 0)`.mapWith(Number);
+const nullableNumber = (value: unknown) =>
+  value === null ? null : Number(value);
+/** Average position weighted by impressions, as Search Console reports it. */
 const weightedPosition = (position: SQLWrapper, impressions: SQLWrapper) =>
   sql<
     number | null
   >`sum(${position} * ${impressions}) / nullif(sum(${impressions}), 0)`.mapWith(
-    (value: unknown) => (value === null ? null : Number(value)),
+    nullableNumber,
+  );
+const summedCtr = (clicks: SQLWrapper, impressions: SQLWrapper) =>
+  sql<
+    number | null
+  >`1.0 * sum(${clicks}) / nullif(sum(${impressions}), 0)`.mapWith(
+    nullableNumber,
   );
 
 type DateRange = { startDate: string; endDate: string };
@@ -37,7 +46,7 @@ type Paging = { limit: number; offset: number };
 /** GSC per day, all devices summed unless `byDevice`. */
 async function readGscSite(
   projectId: string,
-  range: DateRange,
+  range: DateRange & Paging,
   byDevice: boolean,
 ) {
   const where = and(
@@ -52,17 +61,21 @@ async function readGscSite(
         device: gscDailySite.device,
         clicks: gscDailySite.clicks,
         impressions: gscDailySite.impressions,
+        ctr: gscDailySite.ctr,
         position: gscDailySite.position,
       })
       .from(gscDailySite)
       .where(where)
-      .orderBy(asc(gscDailySite.date), asc(gscDailySite.device));
+      .orderBy(asc(gscDailySite.date), asc(gscDailySite.device))
+      .limit(range.limit)
+      .offset(range.offset);
   }
   return db
     .select({
       date: gscDailySite.date,
       clicks: sumOf(gscDailySite.clicks),
       impressions: sumOf(gscDailySite.impressions),
+      ctr: summedCtr(gscDailySite.clicks, gscDailySite.impressions),
       position: weightedPosition(
         gscDailySite.position,
         gscDailySite.impressions,
@@ -71,7 +84,9 @@ async function readGscSite(
     .from(gscDailySite)
     .where(where)
     .groupBy(gscDailySite.date)
-    .orderBy(asc(gscDailySite.date));
+    .orderBy(asc(gscDailySite.date))
+    .limit(range.limit)
+    .offset(range.offset);
 }
 
 /** One page per day, or every page's totals over the range by clicks. */
@@ -93,6 +108,7 @@ async function readGscPages(
         page: gscDailyPage.page,
         clicks: gscDailyPage.clicks,
         impressions: gscDailyPage.impressions,
+        ctr: gscDailyPage.ctr,
         position: gscDailyPage.position,
       })
       .from(gscDailyPage)
@@ -107,6 +123,7 @@ async function readGscPages(
       page: gscDailyPage.page,
       clicks,
       impressions: sumOf(gscDailyPage.impressions),
+      ctr: summedCtr(gscDailyPage.clicks, gscDailyPage.impressions),
       position: weightedPosition(
         gscDailyPage.position,
         gscDailyPage.impressions,
@@ -132,6 +149,7 @@ async function readGscQueryPages(
       page: gscMonthlyQueryPage.page,
       clicks: gscMonthlyQueryPage.clicks,
       impressions: gscMonthlyQueryPage.impressions,
+      ctr: gscMonthlyQueryPage.ctr,
       position: gscMonthlyQueryPage.position,
     })
     .from(gscMonthlyQueryPage)
@@ -155,7 +173,7 @@ async function readGscQueryPages(
     .offset(range.offset);
 }
 
-async function readGa4Site(projectId: string, range: DateRange) {
+async function readGa4Site(projectId: string, range: DateRange & Paging) {
   return db
     .select({
       date: ga4DailySite.date,
@@ -172,7 +190,9 @@ async function readGa4Site(projectId: string, range: DateRange) {
         lte(ga4DailySite.date, range.endDate),
       ),
     )
-    .orderBy(asc(ga4DailySite.date));
+    .orderBy(asc(ga4DailySite.date))
+    .limit(range.limit)
+    .offset(range.offset);
 }
 
 async function readGa4Pages(

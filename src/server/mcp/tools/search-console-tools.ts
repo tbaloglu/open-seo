@@ -23,6 +23,7 @@ import {
   GSC_FILTER_OPERATORS,
   GSC_MAX_ROW_LIMIT,
   GSC_SEARCH_TYPES,
+  resolveDateRange,
   type GscPerformanceInput,
 } from "@/server/features/gsc/searchAnalytics";
 import {
@@ -294,6 +295,21 @@ export const getSearchConsolePerformanceTool = {
         meta,
         "Provide both startDate and endDate, or neither (use dateRange instead).",
       );
+    }
+
+    // A range wholly older than Google's 16 months would clamp to a start
+    // after its end, which Google rejects (fork: the archive may have it).
+    if (args.startDate && args.endDate) {
+      const { startDate: floor } = resolveDateRange({
+        startDate: args.startDate,
+        endDate: args.endDate,
+      });
+      if (floor > args.endDate) {
+        return invalidRequest(
+          meta,
+          `Google keeps Search Console data from ${floor} only, and this range ends before that. Older data: get_archived_search_performance.`,
+        );
+      }
     }
 
     try {

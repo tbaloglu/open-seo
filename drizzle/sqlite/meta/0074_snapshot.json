@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "babea9f2-6078-4d0a-a15a-493f15f5d21a",
+  "id": "a1ccd76c-68f6-4d57-8b97-1bb4d9b0dcad",
   "prevId": "cf54dde4-a32d-41c2-908b-ed079e402787",
   "tables": {
     "account_deletion_requests": {
@@ -6160,7 +6160,17 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "ga4_daily_page_page_idx": {
+          "name": "ga4_daily_page_page_idx",
+          "columns": [
+            "project_id",
+            "page_path",
+            "date"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "ga4_daily_page_project_id_projects_id_fk": {
           "name": "ga4_daily_page_project_id_projects_id_fk",
@@ -6316,7 +6326,17 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "gsc_daily_page_page_idx": {
+          "name": "gsc_daily_page_page_idx",
+          "columns": [
+            "project_id",
+            "page",
+            "date"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "gsc_daily_page_project_id_projects_id_fk": {
           "name": "gsc_daily_page_project_id_projects_id_fk",
@@ -6487,7 +6507,26 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "gsc_monthly_query_page_page_idx": {
+          "name": "gsc_monthly_query_page_page_idx",
+          "columns": [
+            "project_id",
+            "page",
+            "month"
+          ],
+          "isUnique": false
+        },
+        "gsc_monthly_query_page_query_idx": {
+          "name": "gsc_monthly_query_page_query_idx",
+          "columns": [
+            "project_id",
+            "query",
+            "month"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "gsc_monthly_query_page_project_id_projects_id_fk": {
           "name": "gsc_monthly_query_page_project_id_projects_id_fk",

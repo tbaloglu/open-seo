@@ -7,6 +7,7 @@ CREATE TABLE `ga4_daily_page` (
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
+CREATE INDEX `ga4_daily_page_page_idx` ON `ga4_daily_page` (`project_id`,`page_path`,`date`);--> statement-breakpoint
 CREATE TABLE `ga4_daily_site` (
 	`project_id` text NOT NULL,
 	`date` text NOT NULL,
@@ -30,6 +31,7 @@ CREATE TABLE `gsc_daily_page` (
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
+CREATE INDEX `gsc_daily_page_page_idx` ON `gsc_daily_page` (`project_id`,`page`,`date`);--> statement-breakpoint
 CREATE TABLE `gsc_daily_site` (
 	`project_id` text NOT NULL,
 	`date` text NOT NULL,
@@ -55,6 +57,8 @@ CREATE TABLE `gsc_monthly_query_page` (
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
+CREATE INDEX `gsc_monthly_query_page_page_idx` ON `gsc_monthly_query_page` (`project_id`,`page`,`month`);--> statement-breakpoint
+CREATE INDEX `gsc_monthly_query_page_query_idx` ON `gsc_monthly_query_page` (`project_id`,`query`,`month`);--> statement-breakpoint
 CREATE TABLE `search_archive_periods` (
 	`project_id` text NOT NULL,
 	`source` text NOT NULL,

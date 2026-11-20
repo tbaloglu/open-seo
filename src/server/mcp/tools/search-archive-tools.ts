@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { archiveFloor } from "@/server/features/search-archive/archivePlan";
+import { ga4DateInTimeZone } from "@/server/features/ga4/services/Ga4Dates";
+import {
+  archiveFloor,
+  GSC_TIME_ZONE,
+} from "@/server/features/search-archive/archivePlan";
 import {
   ARCHIVE_DATASETS as DATASETS,
   SearchArchiveService,
@@ -175,10 +179,16 @@ const archivedInputSchema = {
 
 type ArchivedArgs = z.infer<z.ZodObject<typeof archivedInputSchema>>;
 
-const roundRow = (row: Record<string, unknown>) =>
-  typeof row.position === "number"
-    ? { ...row, position: Math.round(row.position * 10) / 10 }
-    : row;
+// Four decimals of CTR and one of position is all anyone reads.
+const roundRow = (row: Record<string, unknown>) => ({
+  ...row,
+  ...(typeof row.position === "number"
+    ? { position: Math.round(row.position * 10) / 10 }
+    : {}),
+  ...(typeof row.ctr === "number"
+    ? { ctr: Math.round(row.ctr * 10_000) / 10_000 }
+    : {}),
+});
 
 export const getArchivedSearchPerformanceTool = {
   name: "get_archived_search_performance",
@@ -211,18 +221,20 @@ export const getArchivedSearchPerformanceTool = {
         "startDate must be on or before endDate.",
       );
     }
-    const rows = (
-      await SearchArchiveService.readArchive({
-        ...args,
-        limit: args.limit ?? DEFAULT_LIMIT,
-        offset: args.offset ?? 0,
-      })
-    ).map(roundRow);
     const limit = args.limit ?? DEFAULT_LIMIT;
-    const paged = args.dataset !== "gsc_site" && args.dataset !== "ga4_site";
-    const hasMore = paged && rows.length === limit;
-    const nextOffset = hasMore ? (args.offset ?? 0) + rows.length : null;
-    const googleKeepsFrom = archiveFloor(new Date().toISOString().slice(0, 10));
+    const offset = args.offset ?? 0;
+    // One row past the page says whether another page exists.
+    const fetched = await SearchArchiveService.readArchive({
+      ...args,
+      limit: limit + 1,
+      offset,
+    });
+    const hasMore = fetched.length > limit;
+    const rows = fetched.slice(0, limit).map(roundRow);
+    const nextOffset = hasMore ? offset + rows.length : null;
+    const googleKeepsFrom = archiveFloor(
+      ga4DateInTimeZone(new Date(), GSC_TIME_ZONE),
+    );
     const olderNote =
       args.startDate < googleKeepsFrom
         ? ` Google no longer has the days before ${googleKeepsFrom}; those come only from this archive.`

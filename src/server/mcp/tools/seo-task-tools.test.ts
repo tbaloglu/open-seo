@@ -136,6 +136,20 @@ describe("SEO task tools", () => {
     });
   });
 
+  it("replaces only a task's URLs when nothing else is given", async () => {
+    await save("project", [
+      { code: "D1", title: "Links", affectedUrls: ["https://a.com/old"] },
+    ]);
+    const [task] = await tasksOf("project");
+    const result = await save("project", [
+      { id: task.id, affectedUrls: ["https://a.com/new"] },
+    ]);
+    expect(result.structuredContent.results[0]).toMatchObject({
+      action: "updated",
+      task: { title: "Links", affectedUrls: ["https://a.com/new"] },
+    });
+  });
+
   it("keeps the status stamp when the status does not change", async () => {
     vi.setSystemTime("2026-11-01T10:00:00.000Z");
     await save("project", [{ code: "C1", title: "Speed", status: "selected" }]);

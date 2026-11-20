@@ -1,5 +1,5 @@
 {
-  "id": "e1cf69a3-0eea-4fad-ada1-afd72b8f33ac",
+  "id": "3cbd6366-b17a-46b3-8a65-df95dda2424c",
   "prevId": "f64494a2-d7b9-496f-8f6f-91a0267b9092",
   "version": "7",
   "dialect": "postgresql",
@@ -6787,7 +6787,35 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "ga4_daily_page_page_idx": {
+          "name": "ga4_daily_page_page_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "page_path",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "ga4_daily_page_project_id_projects_id_fk": {
           "name": "ga4_daily_page_project_id_projects_id_fk",
@@ -6936,7 +6964,35 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "gsc_daily_page_page_idx": {
+          "name": "gsc_daily_page_page_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "page",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "gsc_daily_page_project_id_projects_id_fk": {
           "name": "gsc_daily_page_project_id_projects_id_fk",
@@ -7098,7 +7154,62 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "gsc_monthly_query_page_page_idx": {
+          "name": "gsc_monthly_query_page_page_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "page",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "month",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "gsc_monthly_query_page_query_idx": {
+          "name": "gsc_monthly_query_page_query_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "query",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "month",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "gsc_monthly_query_page_project_id_projects_id_fk": {
           "name": "gsc_monthly_query_page_project_id_projects_id_fk",

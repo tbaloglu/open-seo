@@ -8,8 +8,10 @@ import {
   readWorkflowStatus,
   startWorkflow,
   STUCK_RUN_AFTER_MS,
+  terminateStuckWorkflow,
 } from "@/server/lib/startWorkflow";
 import {
+  GSC_TIME_ZONE,
   planDailyFetches,
   planMonthlyFetches,
   type ArchiveFetch,
@@ -22,8 +24,7 @@ import { SearchArchiveRepository } from "./SearchArchiveRepository";
 // The search archive job: copies a project's Search Console and Google
 // Analytics history into our own tables before Google drops it. This module
 // plans and tracks runs and reads the archive; archiveFetch.ts fetches.
-/** GSC reports days in Pacific Time. */
-const GSC_TIME_ZONE = "America/Los_Angeles";
+
 const STARTUP_GRACE_MS = 60_000;
 
 export type ArchiveJobPayload = {
@@ -52,6 +53,7 @@ async function plan(
           source,
           mode,
           today,
+          timeZone: GSC_TIME_ZONE,
           periods: await SearchArchiveRepository.listPeriods(projectId, source),
         }),
       );
@@ -77,6 +79,7 @@ async function plan(
           source,
           mode,
           today,
+          timeZone: ga4.propertyTimeZone,
           periods: await SearchArchiveRepository.listPeriods(projectId, source),
         }),
       );
@@ -89,10 +92,12 @@ async function plan(
   return { fetches, notes };
 }
 
+type Run = NonNullable<
+  Awaited<ReturnType<typeof SearchArchiveRepository.getRun>>
+>;
+
 /** Whether the project's last run is still going. */
-async function isRunActive(
-  run: NonNullable<Awaited<ReturnType<typeof SearchArchiveRepository.getRun>>>,
-) {
+async function isRunActive(run: Run) {
   if (run.status !== "running") return false;
   const ageMs = Date.now() - Date.parse(run.startedAt);
   if (ageMs > STUCK_RUN_AFTER_MS) return false;
@@ -103,6 +108,24 @@ async function isRunActive(
   if (status === null) return true;
   if (status === "missing") return ageMs < STARTUP_GRACE_MS;
   return isWorkflowActive(status);
+}
+
+/**
+ * A run still marked running whose workflow stopped, or that has run past
+ * STUCK_RUN_AFTER_MS: its workflow is terminated, so it can write no more,
+ * and the run is marked failed. Returns the run as it now stands.
+ */
+async function settleDeadRun(projectId: string, run: Run): Promise<Run> {
+  if (run.status !== "running" || (await isRunActive(run))) return run;
+  await terminateStuckWorkflow(env.SEARCH_ARCHIVE_WORKFLOW, run.runId);
+  const note = "The run stopped without finishing.";
+  const finishedAt = new Date().toISOString();
+  await SearchArchiveRepository.updateRun(projectId, run.runId, {
+    status: "failed",
+    finishedAt,
+    note,
+  });
+  return { ...run, status: "failed", finishedAt, note };
 }
 
 /**
@@ -121,24 +144,23 @@ async function start(projectId: string, mode: ArchiveMode) {
       "Connect Search Console or Google Analytics to this project first.",
     );
   }
-  const current = await SearchArchiveRepository.getRun(projectId);
-  if (current && (await isRunActive(current))) {
-    return { started: false, run: current };
-  }
-  if (current?.status === "running") {
-    await SearchArchiveRepository.updateRun(projectId, current.runId, {
-      status: "failed",
-      finishedAt: new Date().toISOString(),
-      note: "The run stopped without finishing.",
-    });
-  }
+  const existing = await SearchArchiveRepository.getRun(projectId);
+  const current = existing && (await settleDeadRun(projectId, existing));
+  if (current?.status === "running") return { started: false, run: current };
+
   const runId = crypto.randomUUID();
-  await SearchArchiveRepository.startRun({
-    projectId,
-    runId,
-    mode,
-    startedAt: new Date().toISOString(),
-  });
+  // Conditional on the row the check above saw: of two starts racing, one
+  // claims the slot and the other reports the run already going.
+  const claimed = await SearchArchiveRepository.claimRun(
+    { projectId, runId, mode, startedAt: new Date().toISOString() },
+    current?.runId ?? null,
+  );
+  if (!claimed) {
+    return {
+      started: false,
+      run: await SearchArchiveRepository.getRun(projectId),
+    };
+  }
   try {
     await startWorkflow(
       env.SEARCH_ARCHIVE_WORKFLOW,
@@ -183,12 +205,15 @@ async function recordProgress(
 
 /** The latest run and what the archive holds, per source. */
 async function getStatus(projectId: string) {
-  const [run, coverage, gsc, ga4] = await Promise.all([
+  const [latest, coverage, gsc, ga4] = await Promise.all([
     SearchArchiveRepository.getRun(projectId),
     SearchArchiveRepository.coverage(projectId),
     GscConnectionRepository.getByProjectId(projectId),
     Ga4ConnectionRepository.getByProjectId(projectId),
   ]);
+  // A run whose workflow died would otherwise read "running" forever and
+  // keep the archive button locked.
+  const run = latest && (await settleDeadRun(projectId, latest));
   return {
     run,
     coverage,
@@ -221,7 +246,7 @@ async function readArchive(params: {
     case "gsc_site":
       return SearchArchiveReadRepository.readGscSite(
         projectId,
-        { startDate, endDate },
+        { startDate, endDate, limit, offset },
         params.byDevice ?? false,
       );
     case "gsc_pages":
@@ -245,6 +270,8 @@ async function readArchive(params: {
       return SearchArchiveReadRepository.readGa4Site(projectId, {
         startDate,
         endDate,
+        limit,
+        offset,
       });
     case "ga4_pages":
       return SearchArchiveReadRepository.readGa4Pages(

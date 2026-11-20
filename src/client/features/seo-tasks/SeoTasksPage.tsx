@@ -248,6 +248,8 @@ function TaskCard({
               {task.doneAt ? ` · done ${task.doneAt.slice(0, 10)}` : ""}
             </p>
             <OutcomeEditor
+              // A saved note from elsewhere resets the draft.
+              key={task.outcomeNote ?? ""}
               task={task}
               saving={updating}
               onSave={(note) => onUpdate({ outcomeNote: note })}

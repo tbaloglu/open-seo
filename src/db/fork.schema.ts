@@ -189,6 +189,12 @@ export const gscDailyPage = sqliteTable(
   },
   (table) => [
     primaryKey({ columns: [table.projectId, table.date, table.page] }),
+    // One page's days, for a page trend.
+    index("gsc_daily_page_page_idx").on(
+      table.projectId,
+      table.page,
+      table.date,
+    ),
   ],
 );
 
@@ -212,6 +218,17 @@ export const gscMonthlyQueryPage = sqliteTable(
     primaryKey({
       columns: [table.projectId, table.month, table.query, table.page],
     }),
+    // One page's or one query's months.
+    index("gsc_monthly_query_page_page_idx").on(
+      table.projectId,
+      table.page,
+      table.month,
+    ),
+    index("gsc_monthly_query_page_query_idx").on(
+      table.projectId,
+      table.query,
+      table.month,
+    ),
   ],
 );
 
@@ -244,6 +261,11 @@ export const ga4DailyPage = sqliteTable(
   },
   (table) => [
     primaryKey({ columns: [table.projectId, table.date, table.pagePath] }),
+    index("ga4_daily_page_page_idx").on(
+      table.projectId,
+      table.pagePath,
+      table.date,
+    ),
   ],
 );
 

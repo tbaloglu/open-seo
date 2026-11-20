@@ -192,13 +192,23 @@ async function update(task: {
   fields: Partial<SeoTaskFields>;
   urls?: string[];
 }) {
+  // An update that only replaces URLs has no fields: Drizzle refuses an
+  // empty SET, so the statement is left out.
+  const hasFields = Object.keys(task.fields).length > 0;
   await runBatch((tx) => [
-    tx
-      .update(seoTasks)
-      .set(task.fields)
-      .where(
-        and(eq(seoTasks.id, task.id), eq(seoTasks.projectId, task.projectId)),
-      ),
+    ...(hasFields
+      ? [
+          tx
+            .update(seoTasks)
+            .set(task.fields)
+            .where(
+              and(
+                eq(seoTasks.id, task.id),
+                eq(seoTasks.projectId, task.projectId),
+              ),
+            ),
+        ]
+      : []),
     ...(task.urls
       ? [
           tx.delete(seoTaskUrls).where(eq(seoTaskUrls.taskId, task.id)),
