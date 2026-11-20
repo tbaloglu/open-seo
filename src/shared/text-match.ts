@@ -40,5 +40,5 @@ export function lowercaseKeyword(text: string, languageCode: string) {
   const lower = /^(tr|az)\b/i.test(languageCode)
     ? text.toLocaleLowerCase(languageCode)
     : text.toLowerCase();
-  return lower.normalize("NFC").replace(/i̇/g, "i");
+  return lower.normalize("NFC").replace(/i\u0307/g, "i");
 }

@@ -40,7 +40,7 @@ export async function refreshSavedKeywordMetrics(
 
   for (const groupRows of groups.values()) {
     const { locationCode, languageCode } = groupRows[0].row;
-    // Rows saved before language-aware lowercasing can hold "i̇stanbul" (i
+    // Rows saved before language-aware lowercasing can hold "i\u0307stanbul" (i
     // plus a combining dot); ask for and match them as "istanbul".
     const lower = (keyword: string) => lowercaseKeyword(keyword, languageCode);
     const metrics = await fetchKeywordMetricsForList(client, {

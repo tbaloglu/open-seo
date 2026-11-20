@@ -1,4 +1,3 @@
-import { lowercaseKeyword } from "@/shared/text-match";
 import { env } from "cloudflare:workers";
 import { sortBy } from "remeda";
 import {
@@ -333,7 +332,7 @@ async function refreshKeywordMetrics(
   if (keywords.length === 0) return { updated: 0 };
 
   const client = createDataforseoClient(billingCustomer);
-  const lower = (text: string) => lowercaseKeyword(text, config.languageCode);
+  const lower = (text: string) => text.toLocaleLowerCase(config.languageCode);
   const metrics = await fetchKeywordMetricsForList(client, {
     // The keyword-data APIs are case-insensitive and echo keywords back
     // lowercased, so ask in lowercase. A match-case keyword can sit next to

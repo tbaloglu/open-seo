@@ -92,13 +92,27 @@ async function assertCanSaveKeywords(
 }
 
 /**
- * Rows saved before language-aware lowercasing can hold "i̇stanbul" (i plus a
- * combining dot, from "İstanbul") or, in Turkish, "isparta" (from "Isparta",
- * now "ısparta"). An older row is the same keyword when it reads the same
- * after dropping that dot, with any of its "i"s standing for a new "ı"; a row
- * with "ı" never matches an "i", since Turkish "kır" and "kir" differ. Each
- * keyword maps to such a row's text, an exact row winning, so a re-save
- * updates the row instead of adding a near twin.
+ * Whether a row saved before language-aware lowercasing is `keyword`. Such a
+ * row can hold "i\u0307stanbul" (i plus a combining dot, from "İstanbul")
+ * or, in Turkish, "isparta" (from "Isparta", now "ısparta"). It matches when
+ * it reads the same after dropping that dot, with any of its "i"s standing
+ * for a new "ı". A stored "ı" never matches an "i": Turkish "kır" and "kir"
+ * differ.
+ */
+function isOlderTwin(stored: string, keyword: string) {
+  const old = stored.normalize("NFC").replace(/i\u0307/g, "i");
+  if (old.length !== keyword.length) return false;
+  for (let i = 0; i < old.length; i++) {
+    if (old[i] !== keyword[i] && !(old[i] === "i" && keyword[i] === "ı"))
+      return false;
+  }
+  return true;
+}
+
+/**
+ * Maps each keyword to the text of the project's row for it: the exact row,
+ * else an older twin, else the keyword itself. A re-save then updates the
+ * older row instead of adding a near duplicate.
  */
 async function matchStoredKeywords(
   input: ResolvedSaveKeywordsInput,
@@ -113,16 +127,6 @@ async function matchStoredKeywords(
     texts.push(text);
     byFoldedKey.set(key, texts);
   }
-  const isOlderTwin = (stored: string, keyword: string) => {
-    const old = [...stored.normalize("NFC").replace(/i̇/g, "i")];
-    const next = [...keyword];
-    return (
-      old.length === next.length &&
-      old.every(
-        (char, i) => char === next[i] || (char === "i" && next[i] === "ı"),
-      )
-    );
-  };
   return new Map(
     keywords.map((keyword) => {
       const texts = byFoldedKey.get(foldedTermKey(keyword)) ?? [];

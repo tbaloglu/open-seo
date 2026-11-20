@@ -122,6 +122,7 @@ describe("explorePrompt brand highlight", () => {
         projectId: "p1",
         prompt: "en uygun kredi",
         models: ["chat_gpt"],
+        webSearch: false,
         highlightBrand: "İşbank",
       },
       { organizationId: "org_1", userId: "user_1", userEmail: "a@b.c" },

@@ -54,7 +54,7 @@ describe("saved keywords in the project language", () => {
   it("updates a row saved with the old lowercasing instead of adding a twin", async () => {
     await testDb.client.execute(`
       INSERT INTO saved_keywords (id, project_id, keyword, location_code, language_code)
-      VALUES ('dotted', 'project', 'i̇stanbul turşucu', 2792, 'tr'),
+      VALUES ('dotted', 'project', 'i\u0307stanbul turşucu', 2792, 'tr'),
              ('dotless', 'project', 'isparta oteli', 2792, 'tr'),
              ('field', 'project', 'kır düğünü', 2792, 'tr')`);
 
@@ -70,7 +70,7 @@ describe("saved keywords in the project language", () => {
     );
     expect(await storedKeywords()).toEqual([
       "isparta oteli",
-      "i̇stanbul turşucu",
+      "i\u0307stanbul turşucu",
       "kir düğünü",
       "kır düğünü",
     ]);
@@ -79,13 +79,20 @@ describe("saved keywords in the project language", () => {
   it("finds keywords whatever i-letter the search uses", async () => {
     await testDb.client.execute(`
       INSERT INTO saved_keywords (id, project_id, keyword, location_code, language_code)
-      VALUES ('dotted', 'project', 'i̇stanbul turşucu', 2792, 'tr'),
+      VALUES ('dotted', 'project', 'i\u0307stanbul turşucu', 2792, 'tr'),
              ('red', 'project', 'kırmızı elbise', 2792, 'tr')`);
 
-    const search = async (term: string) =>
-      (await getSavedKeywords({ projectId: "project", search: term })).rows.map(
-        (row) => row.id,
-      );
+    const search = async (term: string) => {
+      const { rows } = await getSavedKeywords({
+        projectId: "project",
+        search: term,
+        page: 1,
+        pageSize: 50,
+        sort: "keyword",
+        order: "asc",
+      });
+      return rows.map((row) => row.id);
+    };
 
     expect(await search("istanbul")).toEqual(["dotted"]);
     expect(await search("KIRMIZI")).toEqual(["red"]);

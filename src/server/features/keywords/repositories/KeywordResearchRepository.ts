@@ -148,9 +148,9 @@ function escapeLike(value: string) {
 
 // Text filters read every i-letter as "i": Turkish writes "ısparta" where
 // other languages write "isparta", and rows saved before language-aware
-// lowercasing can hold "i̇" (i + U+0307). Both constants are fixed, so they go
+// lowercasing can hold "i\u0307" (i + U+0307). Both constants are fixed, so they go
 // in as literals and cost no bound parameters.
-const foldedSavedKeyword = sql`replace(replace(lower(${savedKeywords.keyword}), ${sql.raw("'ı'")}, 'i'), ${sql.raw("'̇'")}, '')`;
+const foldedSavedKeyword = sql`replace(replace(lower(${savedKeywords.keyword}), ${sql.raw("'ı'")}, 'i'), ${sql.raw("'\u0307'")}, '')`;
 
 function foldedContainsPattern(term: string) {
   return `%${escapeLike(lowercaseKeyword(term, "en").replace(/ı/g, "i"))}%`;
