@@ -144,6 +144,7 @@ export const googleProviders: Record<GoogleProvider, ProviderConfig> = {
       ["gscGrantStatus"],
       ["searchPerformance", projectId],
       ["searchPerformanceTable", projectId],
+      ["keyword-gap", projectId],
       ["dashboardActivation", projectId],
       ["dashboardGscReport", projectId],
     ],

@@ -212,6 +212,36 @@ export const RESEARCH_SCOPE_FILTER_SLOTS: Record<
   pages: { exact_url: 4, subfolder: 4, domain: 2, subdomains: 0 },
 };
 
+/**
+ * A whole competitor domain (subdomains included) for the keyword gap:
+ * "https://www.x.com" and "x.com" are the same; a path, another protocol, or
+ * a bare public suffix such as "com.tr" is rejected before anything is read
+ * or charged.
+ */
+export function parseCompetitorDomain(
+  input: string,
+): ParseResearchTargetResult {
+  const trimmed = input.trim();
+  if (/^[a-z][a-z\d+.-]*:/i.test(trimmed) && !/^https?:\/\//i.test(trimmed)) {
+    return {
+      ok: false,
+      message: "Use a domain like example.com or an http(s) URL.",
+    };
+  }
+  const parsed = parseResearchTarget(trimmed);
+  if (!parsed.ok) return parsed;
+  if (parsed.target.path !== "") {
+    return {
+      ok: false,
+      message: "Use the competitor's domain without a path, like example.com.",
+    };
+  }
+  if (!parseTld(parsed.target.hostname, { allowPrivateDomains: true }).domain) {
+    return { ok: false, message: "Use a registrable domain like example.com." };
+  }
+  return parsed;
+}
+
 /** Conditions the backlinks subfolder url_to/url prefix group consumes. */
 export const BACKLINKS_SUBFOLDER_FILTER_CONDITIONS = 4;
 

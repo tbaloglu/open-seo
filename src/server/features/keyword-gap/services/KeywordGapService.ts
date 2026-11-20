@@ -1,6 +1,5 @@
 import { waitUntil } from "cloudflare:workers";
 import { sortBy } from "remeda";
-import { parse as parseTld } from "tldts";
 import { z } from "zod";
 import type { BillingCustomerContext } from "@/server/billing/subscription";
 import {
@@ -19,7 +18,7 @@ import type { GscDateRange } from "@/server/features/gsc/searchAnalytics";
 import { resolveLabsMarket } from "@/shared/keyword-locations";
 import type { KeywordGapData } from "@/shared/mcp-contracts";
 import {
-  parseResearchTarget,
+  parseCompetitorDomain,
   type ResearchTarget,
 } from "@/shared/researchScope";
 import { foldedTermKey } from "@/shared/text-match";
@@ -48,29 +47,6 @@ type CompetitorPage = z.infer<typeof competitorPageSchema>;
 const intentSchema = z.object({
   search_intent_info: z.object({ main_intent: z.string().nullish() }).nullish(),
 });
-
-/** A whole competitor domain (subdomains included): "https://www.x.com" and
- *  "x.com" are the same; a path, another protocol, or a bare public suffix
- *  such as "com.tr" is rejected before anything is read or charged. */
-function parseCompetitorDomain(input: string): ResearchTarget {
-  const trimmed = input.trim();
-  const invalid = (message: string) =>
-    new AppError("VALIDATION_ERROR", message);
-  if (/^[a-z][a-z\d+.-]*:/i.test(trimmed) && !/^https?:\/\//i.test(trimmed)) {
-    throw invalid("Use a domain like example.com or an http(s) URL.");
-  }
-  const parsed = parseResearchTarget(trimmed);
-  if (!parsed.ok) throw invalid(parsed.message);
-  if (parsed.target.path !== "") {
-    throw invalid(
-      "Use the competitor's domain without a path, like example.com.",
-    );
-  }
-  if (!parseTld(parsed.target.hostname, { allowPrivateDomains: true }).domain) {
-    throw invalid("Use a registrable domain like example.com.");
-  }
-  return parsed.target;
-}
 
 function toCompetitorKeyword(item: DomainRankedKeywordItem) {
   const keyword = item.keyword_data?.keyword ?? item.keyword;
@@ -228,7 +204,11 @@ async function getKeywordGap(
   },
   billingCustomer: BillingCustomerContext,
 ): Promise<KeywordGapData> {
-  const target = parseCompetitorDomain(input.competitorDomain);
+  const parsedTarget = parseCompetitorDomain(input.competitorDomain);
+  if (!parsedTarget.ok) {
+    throw new AppError("VALIDATION_ERROR", parsedTarget.message);
+  }
+  const target = parsedTarget.target;
   const market = resolveLabsMarket(
     { locationCode: input.locationCode, languageCode: input.languageCode },
     input.project,
