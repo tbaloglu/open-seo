@@ -35,8 +35,9 @@ describe("rank tracking cost estimates", () => {
       keywordCount: 1000,
       devices: "both" as const,
       depth: 40,
-      costUsd: 13.056,
-      costCredits: 13_080,
+      // Depth 40 includes load_async_ai_overview ($0.0006 per task).
+      costUsd: 16.128,
+      costCredits: 16_160,
     },
   ])(
     "matches per-call billing for two queued reads of $keywordCount keywords",

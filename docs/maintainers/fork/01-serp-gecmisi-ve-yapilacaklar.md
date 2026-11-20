@@ -117,13 +117,13 @@ Bugün bu işi elle yaptık: dogaltursu.com için 76 kelimenin 72'si boşluk ç�
 
 ## Maliyet
 
-Sıralama takibi bir okumayı standart kuyrukta yapar. İlk 40 sonuç için bir okuma 0,00255 $ tutar (`costPerRankCheckRead`). Sonuçları saklamak ek arama satın almaz.
+Sıralama takibi bir okumayı standart kuyrukta yapar. İlk 40 sonuç için bir okuma 0,00315 $ tutar (`costPerRankCheckRead`): 0,00255 $ okuma ve zehirli sayfa denetimi, 0,0006 $ da sonradan yüklenen AI Overview için (`load_async_ai_overview`, derinlik 40 ve üstünde açık; sayfada böyle bir AI Overview yoksa DataForSEO bu payı iade eder). Sonuçları saklamak ek arama satın almaz.
 
 | Kapsam                        | Sıklık   | Aylık    |
 | ----------------------------- | -------- | -------- |
-| 1 site, 100 kelime, mobil     | aylık    | ≈ 0,26 $ |
-| 1 site, 100 kelime, mobil     | haftalık | ≈ 1,10 $ |
-| 14 site, 100'er kelime, mobil | aylık    | ≈ 3,60 $ |
+| 1 site, 100 kelime, mobil     | aylık    | ≈ 0,32 $ |
+| 1 site, 100 kelime, mobil     | haftalık | ≈ 1,36 $ |
+| 14 site, 100'er kelime, mobil | aylık    | ≈ 4,41 $ |
 
 OpenSEO'nun kendi tahmin aracı, tekrar okuma ihtimali yüzünden en kötü durumu iki okuma sayar. Gerçek maliyet genelde bu tahminin yarısına yakın çıkar.
 

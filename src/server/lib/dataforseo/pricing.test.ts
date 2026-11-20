@@ -203,6 +203,21 @@ describe("dataforseoPricing", () => {
     },
   );
 
+  it.each([
+    // 1 + 3 × 0.75 pages, the poisoned-page check, load_async_ai_overview.
+    [40, 0.00315],
+    // No asynchronous AI Overviews below depth 40.
+    [30, 0.0021],
+  ])("prices a rank check read at depth %i at $%f", (depth, usd) => {
+    expect(
+      dataforseoPricing.serp.rankCheckTaskPost({
+        tasks: [{ keyword: "x", keywordId: "kw", device: "mobile" }],
+        ...location,
+        depth,
+      }),
+    ).toBeCloseTo(usd, 10);
+  });
+
   it("prices a queued task_post batch the way the rank check estimate does", () => {
     // Operator keywords bill 5x, so approvals must see the same mix.
     const keywords = Array.from({ length: 100 }, (_, i) =>

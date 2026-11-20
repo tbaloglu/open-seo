@@ -111,7 +111,7 @@ export const getSearchArchiveStatusTool = {
   config: {
     title: "Get search archive status",
     description:
-      "Show the project's search data archive: the latest archive run (mode, status, rows written, notes such as a source that is not connected) and, per source, the first archived month, the last archived day and when it was last fetched. Uses no credits.",
+      "Show the project's search data archive: the latest archive run (mode, status, rows written, notes such as a source that is not connected) and, per source, the first and last date that actually hold rows (firstDataDate/lastDataDate, months for gsc_query_page; null when nothing is archived), the months scanned (firstMonth → lastDate; a scanned month can be empty) and when it was last fetched. Uses no credits.",
     inputSchema: statusInputSchema,
     outputSchema: z.looseObject({
       run: runOutputSchema.nullable(),
@@ -132,7 +132,7 @@ export const getSearchArchiveStatusTool = {
         ? status.coverage
             .map(
               (row) =>
-                `${row.source}: ${row.firstMonth} → ${row.lastDate} (fetched ${row.lastFetchedAt})`,
+                `${row.source}: data ${row.firstDataDate && row.lastDataDate ? `${row.firstDataDate} → ${row.lastDataDate}` : "none yet"}; scanned ${row.firstMonth} → ${row.lastDate} (fetched ${row.lastFetchedAt})`,
             )
             .join("\n")
         : "Nothing archived yet.";
