@@ -37,8 +37,13 @@ Ayda bir yapılır.
 
 1. `git fetch upstream` ve `git fetch origin`; `origin/main`'den `bakim/upstream-senkron-<tarih>` dalı açılır.
 2. `git merge upstream/main` (rebase değil; upstream commit'leri yazarlarıyla kalır).
-3. Çakışmalarda upstream kodu esas alınır, fork özellikleri çalışır kalır. Geçiş dosyalarında yukarıdaki kurallar geçerlidir: iki dosya da kalır, `_journal.json` elle birleştirilir, en son anlık görüntü iki şemayı da içerir. Eklenti sürümü (üç `plugin.json`) ikisinden büyük olanı alır.
+3. Çakışmalarda upstream kodu esas alınır, fork özellikleri çalışır kalır. Geçiş dosyalarında yukarıdaki kurallar geçerlidir: iki dosya da kalır, `_journal.json` elle birleştirilir, en son anlık görüntü iki şemayı da içerir. Eklenti sürümü (üç `plugin.json`) ikisinden büyük olanı alır. Eşitlemeden sonra üretilen bir sonraki geçişin numarası bir atlayabilir (journal `idx` ile anlık görüntü numarası ayrışır); bu beklenen bir durumdur, düzeltilmez.
 4. Denetim: `pnpm ci:check`, `pnpm test:ci`, `pnpm build`, `pnpm db:generate` ("No schema changes"), boş veritabanında bütün geçişler baştan; canlı benzeri bir veritabanında yalnızca yeni geçişlerin uygulandığı da denenir.
 5. Kırmızı takım: upstream'in getirdiği yeni açık adresler, giriş ve ortam değişkeni değişiklikleri, kurulum ekranındaki yeni yönlendirmeler Docker/Coolify kurulumumuz (`AUTH_MODE=password`) için tek tek okunur.
-6. PR açılır (ne geldi, çakışmalar, ne doğrulandı, risk).
-7. Yayından önce canlı veritabanının yedeği alınır; yayından sonra açılış günlüğünde geçişlerin uygulandığı ve sitenin açıldığı kontrol edilir.
+6. Aşağıdaki "Upstream'den ayrılan noktalar" listesi yeniden kontrol edilir: kapatılan özellik hâlâ kapalı mı, kapatma nedeni sürüyor mu.
+7. PR açılır (ne geldi, çakışmalar, ne doğrulandı, risk).
+8. Yayından önce canlı veritabanının yedeği alınır; yayından sonra açılış günlüğünde geçişlerin uygulandığı ve sitenin açıldığı kontrol edilir.
+
+### Upstream'den ayrılan noktalar
+
+- **Move to Every App kapalı** (`src/shared/fork-flags.ts`, `MOVE_TO_EVERY_APP_ENABLED = false`): ayarlardaki bölüm gösterilmez, taşıma sunucu fonksiyonları `FORBIDDEN` döner. Neden: şemamız upstream'inkinden farklı, taşıma hedefe yarım yazar.

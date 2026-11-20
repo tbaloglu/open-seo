@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { getAuthMode } from "@/lib/auth-mode";
+import { MOVE_TO_EVERY_APP_ENABLED } from "@/shared/fork-flags";
 import type { EnsuredUserContext } from "@/middleware/ensure-user/types";
 import { requireOrgPermission } from "@/server/auth/org-gate";
 import {
@@ -28,6 +29,12 @@ async function ownerMove<T>(
   context: Pick<EnsuredUserContext, "role">,
   run: () => Promise<T>,
 ) {
+  if (!MOVE_TO_EVERY_APP_ENABLED) {
+    throw new AppError(
+      "FORBIDDEN",
+      "Move to Every App is disabled on this fork",
+    );
+  }
   const mode = await authMode();
   if (mode === "hosted" || mode === "everyapp") throw new AppError("FORBIDDEN");
   requireOrgPermission(context, { organization: ["delete"] });

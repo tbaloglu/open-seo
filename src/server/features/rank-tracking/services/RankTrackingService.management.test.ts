@@ -61,6 +61,14 @@ const billingCustomer = {
   projectId: "project_1",
 };
 
+// Defaults both describes rely on: every inserted row is reported back.
+beforeEach(() => {
+  mocks.addKeywordsToConfig.mockImplementation(
+    async (rows: Array<{ id: string }>) => rows.map((row) => row.id),
+  );
+  mocks.createDataforseoClient.mockReturnValue({});
+});
+
 describe("RankTrackingService management invariants", () => {
   beforeEach(() => {
     mocks.getConfigById.mockResolvedValue(config);
@@ -72,10 +80,6 @@ describe("RankTrackingService management invariants", () => {
     // explicit defaults; the plan tests override them per case.
     mocks.isHostedServerAuthMode.mockResolvedValue(true);
     mocks.customerHasPaidPlan.mockResolvedValue(true);
-    mocks.addKeywordsToConfig.mockImplementation(
-      async (rows: Array<{ id: string }>) => rows.map((row) => row.id),
-    );
-    mocks.createDataforseoClient.mockReturnValue({});
   });
 
   it("reports only keyword rows actually inserted", async () => {

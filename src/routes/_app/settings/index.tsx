@@ -7,6 +7,7 @@ import { ThemePreferenceRadio } from "@/client/components/ThemePreferenceMenuIte
 import { everyAppAccountQueryOptions } from "@/client/features/every-app/everyAppAccountQueries";
 import { ImportFromSelfHosted } from "@/client/features/every-app/ImportFromSelfHosted";
 import { MoveToEveryAppSettings } from "@/client/features/every-app/MoveToEveryAppSettings";
+import { MOVE_TO_EVERY_APP_ENABLED } from "@/shared/fork-flags";
 import { DeleteAccountSettings } from "@/client/features/settings/DeleteAccountSettings";
 import { McpConnectionsSettings } from "@/client/features/settings/McpConnectionsSettings";
 import { PrivacySettings } from "@/client/features/settings/PrivacySettings";
@@ -42,7 +43,9 @@ function PersonalSettings() {
 
       {hasAccounts ? <ApiKeySettings /> : null}
 
-      {isHosted || isEveryAppClientAuthMode() ? null : (
+      {isHosted ||
+      isEveryAppClientAuthMode() ||
+      !MOVE_TO_EVERY_APP_ENABLED ? null : (
         <MoveToEveryAppSettings />
       )}
 
