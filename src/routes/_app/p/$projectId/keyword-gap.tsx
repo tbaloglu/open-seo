@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { KeywordGapPage } from "@/client/features/keyword-gap/KeywordGapPage";
+import { useProjectMarket } from "@/client/features/projects/useProjectMarket";
+import { pageHead } from "@/client/lib/pageHead";
 import {
   DEFAULT_LOCATION_CODE,
   isLabsLocationCode,
-} from "@/client/features/keywords/locations";
-import { useProjectMarket } from "@/client/features/projects/useProjectMarket";
-import { pageHead } from "@/client/lib/pageHead";
+  isLanguageServedForLocation,
+} from "@/shared/keyword-locations";
 import { keywordGapSearchSchema } from "@/types/schemas/keyword-gap";
 
 export const Route = createFileRoute("/_app/p/$projectId/keyword-gap")({
@@ -19,9 +20,15 @@ function KeywordGapRoute() {
   const navigate = useNavigate({ from: Route.fullPath });
   const { competitor = "", loc } = Route.useSearch();
   const projectMarket = useProjectMarket(projectId);
-  // Competitor keywords come from Labs, so only Labs countries are valid.
+  // Competitor keywords come from Labs; the server falls back to the United
+  // States for a project market Labs can't serve, so the select does too.
   const defaultLocationCode =
-    projectMarket && isLabsLocationCode(projectMarket.locationCode)
+    projectMarket &&
+    isLabsLocationCode(projectMarket.locationCode) &&
+    isLanguageServedForLocation(
+      projectMarket.locationCode,
+      projectMarket.languageCode,
+    )
       ? projectMarket.locationCode
       : DEFAULT_LOCATION_CODE;
   const sentLocationCode =
@@ -30,7 +37,7 @@ function KeywordGapRoute() {
   return (
     <KeywordGapPage
       projectId={projectId}
-      competitor={competitor.trim()}
+      competitor={competitor}
       locationCode={sentLocationCode ?? defaultLocationCode}
       sentLocationCode={sentLocationCode}
       onSearch={(values) => {

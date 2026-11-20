@@ -44,6 +44,7 @@ export const getKeywordGap = createServerFn({ method: "POST" })
         endDate: result.endDate,
         locationCode: result.locationCode,
         languageCode: result.languageCode,
+        maxRank: result.maxRank,
         positionThreshold: result.positionThreshold,
         searchConsoleTruncated: result.searchConsoleTruncated,
         counts: {

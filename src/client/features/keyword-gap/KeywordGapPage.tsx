@@ -11,18 +11,8 @@ import { GoogleConnectionCard } from "@/client/features/integrations/GoogleConne
 import { GapResults } from "@/client/features/keyword-gap/GapResults";
 import { LABS_LOCATION_OPTIONS } from "@/client/features/keywords/locations";
 import { createFormValidationErrors, getFieldError } from "@/client/lib/forms";
-import { getErrorCode } from "@/client/lib/error-messages";
 import { getKeywordGap } from "@/serverFunctions/keyword-gap";
-import { parseResearchTarget } from "@/shared/researchScope";
-
-function competitorError(value: string): string | null {
-  const parsed = parseResearchTarget(value);
-  if (!parsed.ok) return parsed.message;
-  if (parsed.target.path !== "") {
-    return "Use the competitor's domain without a path, like example.com.";
-  }
-  return null;
-}
+import { parseCompetitorDomain } from "@/shared/researchScope";
 
 export function KeywordGapPage({
   projectId,
@@ -32,6 +22,7 @@ export function KeywordGapPage({
   onSearch,
 }: {
   projectId: string;
+  /** The raw `competitor` URL param. */
   competitor: string;
   /** The market the location select shows. */
   locationCode: number;
@@ -39,21 +30,26 @@ export function KeywordGapPage({
   sentLocationCode: number | undefined;
   onSearch: (values: { competitor: string; locationCode: number }) => void;
 }) {
+  // The same check as the form, so a hand-edited URL never reaches the
+  // paid call; the normalized domain keeps the cache key stable.
+  const parsed = competitor.trim() ? parseCompetitorDomain(competitor) : null;
+  const domain = parsed?.ok ? parsed.target.display : "";
   const gapQuery = useQuery({
-    enabled: competitor !== "",
-    queryKey: ["keyword-gap", projectId, competitor, sentLocationCode],
+    enabled: domain !== "",
+    queryKey: ["keyword-gap", projectId, domain, sentLocationCode],
     queryFn: () =>
       getKeywordGap({
         data: {
           projectId,
-          competitorDomain: competitor,
+          competitorDomain: domain,
           locationCode: sentLocationCode,
         },
       }),
     staleTime: 5 * 60_000,
-    // Out of credits, a retry cannot succeed, so show the get-credits card now.
-    retry: (failureCount, error) =>
-      failureCount < 3 && getErrorCode(error) !== "INSUFFICIENT_CREDITS",
+    // Each run is billed: only the user's Search or Retry starts one.
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
   });
   const result = gapQuery.data;
 
@@ -65,13 +61,14 @@ export function KeywordGapPage({
           description="Keywords a competitor ranks for where your site has no Search Console impressions or ranks worse than position 20."
         />
         <GapSearchCard
-          competitor={competitor}
+          competitor={domain || competitor}
           locationCode={locationCode}
+          urlError={parsed && !parsed.ok ? parsed.message : null}
           pending={gapQuery.isFetching}
           onSearch={onSearch}
         />
 
-        {competitor === "" ? (
+        {domain === "" ? (
           <EmptyState
             kind="no-data"
             title="Compare a competitor with your site"
@@ -110,11 +107,14 @@ export function KeywordGapPage({
 function GapSearchCard({
   competitor,
   locationCode,
+  urlError,
   pending,
   onSearch,
 }: {
   competitor: string;
   locationCode: number;
+  /** Why the competitor in the URL was not searched. */
+  urlError: string | null;
   pending: boolean;
   onSearch: (values: { competitor: string; locationCode: number }) => void;
 }) {
@@ -122,27 +122,37 @@ function GapSearchCard({
     defaultValues: { competitor, locationCode },
     validators: {
       onSubmit: ({ value }) => {
-        const message = competitorError(value.competitor);
-        return message
-          ? createFormValidationErrors({ fields: { competitor: message } })
-          : null;
+        const parsed = parseCompetitorDomain(value.competitor);
+        return parsed.ok
+          ? null
+          : createFormValidationErrors({
+              fields: { competitor: parsed.message },
+            });
       },
     },
-    onSubmit: ({ value }) =>
+    onSubmit: ({ value }) => {
+      const parsed = parseCompetitorDomain(value.competitor);
+      if (!parsed.ok) return;
       onSearch({
-        competitor: value.competitor.trim(),
+        competitor: parsed.target.display,
         locationCode: value.locationCode,
-      }),
+      });
+    },
   });
 
-  // Back/forward and the project's market arriving change the URL state.
+  // Back/forward changes the competitor; the project's market arriving
+  // changes only the location, so a typed competitor survives it.
   useEffect(() => {
-    form.reset({ competitor, locationCode });
-  }, [form, competitor, locationCode]);
+    form.setFieldValue("competitor", competitor);
+  }, [form, competitor]);
+  useEffect(() => {
+    form.setFieldValue("locationCode", locationCode);
+  }, [form, locationCode]);
 
-  const error = useStore(form.store, (state) =>
+  const formError = useStore(form.store, (state) =>
     getFieldError(state.fieldMeta.competitor?.errors ?? []),
   );
+  const error = formError ?? urlError;
 
   return (
     <SearchCard

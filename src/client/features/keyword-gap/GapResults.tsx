@@ -16,6 +16,7 @@ import {
 } from "@/client/components/table/TableBulkActionBar";
 import { TablePagination } from "@/client/components/table/TablePagination";
 import { Badge } from "@/client/components/ui/badge";
+import { getStandardErrorMessage } from "@/client/lib/error-messages";
 import { captureClientEvent } from "@/client/lib/posthog";
 import type { getKeywordGap } from "@/serverFunctions/keyword-gap";
 import { saveKeywords } from "@/serverFunctions/keywords";
@@ -106,11 +107,17 @@ export function GapResults({
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         <DataTable
           table={table}
-          empty={{
-            title: "No gap keywords",
-            description:
-              "Your site already ranks in the top 20 for every compared keyword.",
-          }}
+          empty={
+            counts.competitorTotal === 0
+              ? {
+                  title: "No competitor keywords found",
+                  description: `DataForSEO Labs has no top-${result.maxRank} organic keywords for ${result.competitor} in this country.`,
+                }
+              : {
+                  title: "No gap keywords",
+                  description: `Your site already ranks in the top ${result.positionThreshold} for every compared keyword.`,
+                }
+          }
         />
         {result.keywords.length > 0 ? (
           <TablePagination
@@ -164,6 +171,8 @@ function useSaveGapKeywords(
 ) {
   const queryClient = useQueryClient();
   return useMutation({
+    // No metrics: saving bare keywords leaves the richer stats of keywords
+    // already saved (CPC, difficulty, intent) untouched.
     mutationFn: (rows: GapRow[]) =>
       saveKeywords({
         data: {
@@ -171,10 +180,6 @@ function useSaveGapKeywords(
           keywords: rows.map((row) => row.keyword),
           locationCode: result.locationCode,
           languageCode: result.languageCode,
-          metrics: rows.map((row) => ({
-            keyword: row.keyword,
-            searchVolume: row.searchVolume,
-          })),
         },
       }),
     onSuccess: (_result, rows) => {
@@ -187,11 +192,15 @@ function useSaveGapKeywords(
       });
       toast.success(
         `Saved ${rows.length} ${rows.length === 1 ? "keyword" : "keywords"}`,
+        {
+          description:
+            "Use Update keyword stats on Saved Keywords to fetch their volume, difficulty, and CPC.",
+        },
       );
       onSaved();
     },
-    onError: () => {
-      toast.error("Couldn't save the keywords");
+    onError: (error) => {
+      toast.error(getStandardErrorMessage(error, "Couldn't save the keywords"));
     },
   });
 }
