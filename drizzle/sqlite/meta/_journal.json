@@ -519,6 +519,13 @@
       "when": 1795128702084,
       "tag": "0073_fork_serp_history",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "6",
+      "when": 1795134091538,
+      "tag": "0074_fork_seo_tasks_search_archive",
+      "breakpoints": true
     }
   ]
 }

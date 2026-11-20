@@ -335,9 +335,15 @@ export const getSearchConsolePerformanceTool = {
       const filterText = metricFilter
         ? ` · filtered ${fetched.length} rows → ${kept.length}`
         : "";
+      // Google keeps 16 months, so an older start was clamped (fork: the
+      // project's archive may hold the rest).
+      const archiveNote =
+        args.startDate && args.startDate < result.request.startDate
+          ? `\nGoogle no longer has days before ${result.request.startDate}; the range starts there. Older data: get_archived_search_performance.`
+          : "";
       const header =
         `${result.siteUrl} · ${dimensions.join("+")} · ${result.request.startDate}→${result.request.endDate} · ` +
-        `${rows.length} row${rows.length === 1 ? "" : "s"}${filterText}${hasMore ? ` (more available — call again with startRow=${nextStartRow})` : ""}`;
+        `${rows.length} row${rows.length === 1 ? "" : "s"}${filterText}${hasMore ? ` (more available — call again with startRow=${nextStartRow})` : ""}${archiveNote}`;
       const text =
         rows.length > 0
           ? `${header}\n${formatMcpTable(rows, GSC_PERF_COLUMNS)}`

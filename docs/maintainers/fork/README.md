@@ -6,10 +6,12 @@ Bu klasör yalnızca bu fork'a (tbaloglu/open-seo) özgü kararları tutar. Tasa
 
 Fork'un kendi şema değişiklikleri ayrı şema dosyalarında durur (`src/db/fork.schema.ts`, `src/db/pg/fork.schema.ts`), geçişleri de adında `fork` geçen dosyalardadır:
 
-| Veritabanı | Dosya                                       |
-| ---------- | ------------------------------------------- |
-| SQLite/D1  | `drizzle/sqlite/0073_fork_serp_history.sql` |
-| Postgres   | `drizzle/pg/0051_fork_serp_history.sql`     |
+| Veritabanı | Dosya                                                   |
+| ---------- | ------------------------------------------------------- |
+| SQLite/D1  | `drizzle/sqlite/0073_fork_serp_history.sql`             |
+| Postgres   | `drizzle/pg/0051_fork_serp_history.sql`                 |
+| SQLite/D1  | `drizzle/sqlite/0074_fork_seo_tasks_search_archive.sql` |
+| Postgres   | `drizzle/pg/0052_fork_seo_tasks_search_archive.sql`     |
 
 ### Kural: uygulanmış geçiş dosyası silinmez, yeniden adlandırılmaz, yeniden üretilmez
 
