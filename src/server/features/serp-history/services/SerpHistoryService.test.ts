@@ -48,10 +48,13 @@ beforeAll(async () => {
       VALUES ('config', 'project', 'openseo.so', 'mobile', 10, 'tr'),
              ('two', 'project', 'two.example', 'mobile', 10, 'tr'),
              ('one', 'project', 'one.example', 'mobile', 10, 'tr'),
-             ('elsewhere', 'other', 'openseo.so', 'mobile', 10, 'tr');
+             ('elsewhere', 'other', 'openseo.so', 'mobile', 10, 'tr'),
+             ('grow', 'project', 'grow.example', 'mobile', 10, 'tr'),
+             ('empty', 'project', 'empty.example', 'mobile', 10, 'tr');
     INSERT INTO rank_tracking_keywords (id, config_id, keyword)
       VALUES ('kw', 'config', 'turşu kavanozu'), ('kw-new', 'config', 'turşu suyu'),
-             ('kw-other', 'elsewhere', 'turşu kavanozu');
+             ('kw-other', 'elsewhere', 'turşu kavanozu'),
+             ('kw-upper', 'grow', 'Turşu'), ('kw-lower', 'grow', 'turşu');
     ${run("first", "config", 1)}
     ${run("second", "config", 2)}
     ${run("latest", "config", 3)}
@@ -59,6 +62,13 @@ beforeAll(async () => {
     ${run("two-b", "two", 2)}
     ${run("one-a", "one", 1)}
     ${run("elsewhere-a", "elsewhere", 1)}
+    ${run("grow-0", "grow", 1)}
+    ${run("grow-a", "grow", 2)}
+    ${run("grow-b", "grow", 3)}
+    ${check("grow-0", "kw-a", 2, null)}
+    ${check("grow-a", "kw-a", 2, { top10: ["x.com"] })}
+    ${check("grow-b", "kw-a", 2, { top10: ["x.com"], features: [["people_also_ask", "shared q", null]] })}
+    ${check("grow-b", "kw-b", null, { top10: ["y.com", "x.com"], features: [["people_also_ask", "shared q", null]] })}
     ${check("first", "kw", 5, { top10: ["a.com", "b.com"], features: [["people_also_ask", "q1", null]] })}
     ${check("second", "kw", 3, {
       top10: ["a.com", "c.com"],
@@ -97,7 +107,8 @@ const changes = (input: {
   });
 
 const history = (input: {
-  keyword: string;
+  keyword?: string;
+  trackingKeywordId?: string;
   trackerId?: string;
   device?: "desktop";
 }) =>
@@ -257,10 +268,24 @@ describe("SERP history", () => {
     ]);
   });
 
+  it("finds the keyword by id on a match-case tracker", async () => {
+    const result = await history({
+      trackerId: "grow",
+      trackingKeywordId: "kw-lower",
+    });
+
+    expect(result.keyword.keyword).toBe("turşu");
+  });
+
   it.each([
     [
       "another project's tracker",
       { keyword: "turşu kavanozu", trackerId: "elsewhere" },
+      "NOT_FOUND",
+    ],
+    [
+      "another tracker's keyword id",
+      { trackerId: "config", trackingKeywordId: "kw-other" },
       "NOT_FOUND",
     ],
     [
@@ -316,6 +341,56 @@ describe("SERP tracker views", () => {
     expect(result.sources).toEqual([
       { value: "openseo.so", keywords: ["kw"], own: true },
     ]);
+  });
+
+  it("doesn't mark a domain as entered for a keyword the previous check didn't save", async () => {
+    const result = await SerpHistoryService.getCompetitors({
+      ...tracker("grow"),
+      runs: 6,
+    });
+
+    expect(result.comparedKeywords).toBe(1);
+    expect(
+      result.domains.map((row) => [
+        row.domain,
+        row.counts,
+        row.change,
+        row.status,
+      ]),
+    ).toEqual([
+      ["x.com", [1, 2], 0, null],
+      ["y.com", [0, 1], 0, null],
+    ]);
+  });
+
+  it("merges a question shared by keywords and returns no run without checks", async () => {
+    const grow = await SerpHistoryService.getQuestionsAndSources(
+      tracker("grow"),
+    );
+    const empty = await SerpHistoryService.getQuestionsAndSources(
+      tracker("empty"),
+    );
+
+    expect(grow.questions).toEqual([
+      { value: "shared q", keywords: ["kw-a", "kw-b"] },
+    ]);
+    expect(empty.run).toBeNull();
+  });
+
+  it("compares the latest two saved checks when an older one wasn't saved", async () => {
+    const { runs } = await SerpHistoryService.listRuns(tracker("grow"));
+    const result = await changes({ trackerId: "grow" });
+
+    expect(runs.map((row) => [row.id, row.saved])).toEqual([
+      ["grow-b", true],
+      ["grow-a", true],
+      ["grow-0", false],
+    ]);
+    expect([result.runs.from.id, result.runs.to.id]).toEqual([
+      "grow-a",
+      "grow-b",
+    ]);
+    expect(result.runs.previous).toBeNull();
   });
 
   it("shows checks from before SERP history as not saved", async () => {

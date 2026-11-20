@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ExpandableList } from "@/client/components/ExpandableList";
 import { QueryState } from "@/client/components/QueryState";
 import { SegmentedToggle } from "@/client/components/SegmentedToggle";
 import { SkeletonTableRows } from "@/client/components/SkeletonPresets";
@@ -27,6 +28,7 @@ import {
   PositionChange,
   SetChanges,
 } from "./SerpChangeCells";
+import { resolveRunPair } from "./serpRunPickers";
 import {
   HeldBadge,
   NOISE_NOTE,
@@ -51,57 +53,46 @@ export function SerpChangesTab(props: SerpTrackerProps) {
       errorFallback="Failed to load checks"
       loading={<SkeletonTableRows rows={6} columns={6} className="p-4" />}
     >
-      {({ runs }) => {
-        const saved = runs.filter((run) => run.saved);
-        if (runs.length < 2) {
-          return (
-            <SerpMessage title="Needs two checks">
-              This tab compares the latest check with the one before. Run
-              another check to see what changed.
-            </SerpMessage>
-          );
-        }
-        if (saved.length < 2) {
-          return (
-            <SerpMessage
-              title={
-                saved.length === 0
-                  ? "No saved SERPs yet"
-                  : "Only one check has a saved SERP"
-              }
-            >
-              Checks from before SERP history was saved can&apos;t be compared.
-              The next check makes the comparison available.
-            </SerpMessage>
-          );
-        }
-        return <ChangesView {...props} runs={runs} />;
-      }}
+      {({ runs }) => <ChangesView {...props} runs={runs} />}
     </QueryState>
   );
 }
 
 function ChangesView({ runs, ...props }: SerpTrackerProps & { runs: Run[] }) {
-  const saved = runs.filter((run) => run.saved);
-  const [toId, setToId] = useState(saved[0].id);
-  const [fromId, setFromId] = useState(saved[1].id);
+  // The picks the user made; resolveRunPair keeps them valid as runs refresh.
+  const [requested, setRequested] = useState<{
+    toId?: string;
+    fromId?: string;
+  }>({});
   const [show, setShow] = useState<"changed" | "all">("changed");
-  const toIndex = runs.findIndex((run) => run.id === toId);
+  const pair = resolveRunPair(runs, requested);
   const query = useQuery({
-    queryKey: serpKey(props, "changes", fromId, toId),
+    queryKey: serpKey(props, "changes", pair?.fromId, pair?.toId),
     queryFn: () =>
-      getSerpChanges({ data: { ...props, fromRunId: fromId, toRunId: toId } }),
+      getSerpChanges({
+        data: { ...props, fromRunId: pair?.fromId, toRunId: pair?.toId },
+      }),
+    enabled: pair !== null,
   });
 
-  const pickTo = (id: string) => {
-    setToId(id);
-    const index = runs.findIndex((run) => run.id === id);
-    const fromIndex = runs.findIndex((run) => run.id === fromId);
-    if (fromIndex <= index) {
-      const next = runs.slice(index + 1).find((run) => run.saved);
-      if (next) setFromId(next.id);
-    }
-  };
+  if (!pair) {
+    const saved = runs.filter((run) => run.saved).length;
+    return runs.length < 2 ? (
+      <SerpMessage title="Needs two checks">
+        This tab compares the latest check with the one before. Run another
+        check to see what changed.
+      </SerpMessage>
+    ) : (
+      <SerpMessage
+        title={
+          saved === 0 ? "No saved SERPs yet" : "Only one check has a saved SERP"
+        }
+      >
+        Checks from before SERP history was saved can&apos;t be compared. The
+        next check makes the comparison available.
+      </SerpMessage>
+    );
+  }
 
   return (
     <>
@@ -120,17 +111,16 @@ function ChangesView({ runs, ...props }: SerpTrackerProps & { runs: Run[] }) {
       >
         <RunSelect
           label="Earlier check"
-          runs={runs.slice(toIndex + 1)}
-          value={fromId}
-          onChange={setFromId}
+          runs={pair.earlierOptions}
+          value={pair.fromId}
+          onChange={(fromId) => setRequested({ toId: pair.toId, fromId })}
         />
         <span className="text-sm text-muted-foreground">→</span>
         <RunSelect
           label="Later check"
-          // The oldest check has nothing before it to compare with.
-          runs={runs.slice(0, -1)}
-          value={toId}
-          onChange={pickTo}
+          runs={pair.laterOptions}
+          value={pair.toId}
+          onChange={(toId) => setRequested({ toId, fromId: pair.fromId })}
         />
       </DataTableToolbar>
       <QueryState
@@ -172,7 +162,7 @@ function RunSelect({
       <SelectTrigger size="sm" aria-label={label} title={label}>
         <SelectValue />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className="min-w-max">
         {runs.map((run, index) => (
           <SelectItem key={run.id} value={run.id} disabled={!run.saved}>
             {items[index].label}
@@ -246,10 +236,14 @@ function ChangesTable({
         </div>
       )}
       {data.notCompared.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          Not compared (no saved SERP in both checks):{" "}
-          {data.notCompared.join(", ")}
-        </p>
+        <div className="text-xs text-muted-foreground">
+          <p>Not compared (no saved SERP in both checks):</p>
+          <ExpandableList
+            items={data.notCompared}
+            className="flex flex-wrap gap-x-3"
+            renderItem={(keyword) => <li key={keyword}>{keyword}</li>}
+          />
+        </div>
       )}
     </div>
   );

@@ -63,6 +63,13 @@ function CompetitorsTable({ data }: { data: Competitors }) {
   });
   const [showAll, setShowAll] = useState(false);
   const hasChange = data.runs.length > 1;
+  const [previousRun, lastRun] = data.runs.slice(-2);
+  // The last two checks saved different keywords, so the change compares
+  // only the ones in both.
+  const partial =
+    data.comparedKeywords !== null &&
+    (data.comparedKeywords !== lastRun.keywords ||
+      data.comparedKeywords !== previousRun.keywords);
   const rows = useMemo(() => {
     if (sort.id === "latest") {
       // The service already orders by latest count, then by all checks.
@@ -101,6 +108,8 @@ function CompetitorsTable({ data }: { data: Competitors }) {
         {!hasChange && " Run another check to see changes."}
         {data.unsavedRuns > 0 &&
           ` ${data.unsavedRuns} older check${data.unsavedRuns === 1 ? "" : "s"} ran before SERP history was saved.`}
+        {partial &&
+          ` Change and New/Left compare only the ${data.comparedKeywords} keyword${data.comparedKeywords === 1 ? "" : "s"} saved in both of the last two checks.`}
       </p>
       <div className="overflow-hidden rounded-lg border border-border">
         <Table>
@@ -116,11 +125,7 @@ function CompetitorsTable({ data }: { data: Competitors }) {
               {data.runs.map((run, index) => {
                 const latest = index === data.runs.length - 1;
                 return (
-                  <TableHead
-                    key={run.id}
-                    className="text-right"
-                    title={`${run.keywords} keyword${run.keywords === 1 ? "" : "s"} saved`}
-                  >
+                  <TableHead key={run.id} className="h-auto py-2 text-right">
                     {latest ? (
                       <SortableHeader
                         column={column("latest")}
@@ -133,6 +138,9 @@ function CompetitorsTable({ data }: { data: Competitors }) {
                         {runDate(run.startedAt)}
                       </span>
                     )}
+                    <div className="text-xs font-normal text-muted-foreground">
+                      {run.keywords} keyword{run.keywords === 1 ? "" : "s"}
+                    </div>
                   </TableHead>
                 );
               })}

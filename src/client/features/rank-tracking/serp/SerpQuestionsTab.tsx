@@ -3,7 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { QueryState } from "@/client/components/QueryState";
 import { SkeletonTableRows } from "@/client/components/SkeletonPresets";
 import { DataTableToolbar } from "@/client/components/table/DataTableToolbar";
+import { Button } from "@/client/components/ui/button";
 import { Input } from "@/client/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/client/components/ui/popover";
 import {
   Table,
   TableBody,
@@ -139,11 +145,8 @@ function CountTable({
                     {row.own && <OwnBadge />}
                   </span>
                 </TableCell>
-                <TableCell
-                  className="cursor-help text-right tabular-nums"
-                  title={row.keywords.join("\n")}
-                >
-                  {row.keywords.length}
+                <TableCell className="text-right">
+                  <KeywordsPopover keywords={row.keywords} />
                 </TableCell>
               </TableRow>
             ))}
@@ -161,5 +164,32 @@ function CountTable({
         </Table>
       </div>
     </section>
+  );
+}
+
+/** The count, opening the keywords' list on click, tap or Enter. */
+function KeywordsPopover({ keywords }: { keywords: string[] }) {
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="xs"
+            className="tabular-nums"
+            aria-label={`${keywords.length} keyword${keywords.length === 1 ? "" : "s"}: show them`}
+          />
+        }
+      >
+        {keywords.length}
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-72">
+        <ul className="space-y-1 text-sm">
+          {keywords.map((keyword) => (
+            <li key={keyword}>{keyword}</li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }

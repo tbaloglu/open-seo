@@ -266,7 +266,8 @@ export function RankTrackingDomainDetail({
             // The sort column is per device, so a device switch resets it.
             onSearchChange({ device, sort: undefined, order: undefined })
           }
-          comparePeriod={comparePeriod}
+          // The SERP tabs pick their own checks.
+          comparePeriod={search.tab ? undefined : comparePeriod}
           onComparePeriodChange={(compare) => onSearchChange({ compare })}
           onEdit={onEdit}
           onToggleAddKeywords={() => setShowAddKeywords((c) => !c)}

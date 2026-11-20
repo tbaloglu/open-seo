@@ -50,13 +50,15 @@ export const getSerpChanges = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context }) => {
-    const { runs, keywords, notCompared, domains } =
-      await SerpHistoryService.getChanges({
+    // The tab lists keywords only; domain movement is the Competitors tab.
+    const { runs, keywords, notCompared } = await SerpHistoryService.getChanges(
+      {
         ...trackerInput(data, context),
         fromRunId: data.fromRunId,
         toRunId: data.toRunId,
-      });
-    return { runs, keywords, notCompared, domains };
+      },
+    );
+    return { runs, keywords, notCompared };
   });
 
 export const getSerpQuestionsAndSources = createServerFn({ method: "POST" })
@@ -71,13 +73,11 @@ export const getSerpKeywordHistory = createServerFn({ method: "POST" })
   .validator(
     trackerSchema.extend({
       trackingKeywordId: z.string().uuid(),
-      keyword: z.string().min(1),
     }),
   )
   .handler(async ({ data, context }) => {
     const { checks } = await SerpHistoryService.getKeywordHistory({
       ...trackerInput(data, context),
-      keyword: data.keyword,
       trackingKeywordId: data.trackingKeywordId,
       runs: 6,
     });

@@ -36,8 +36,8 @@ async function trackerAndDevice(input: TrackerInput) {
 /** The tracker's latest completed full checks, newest first, and whether each one's SERPs were saved. */
 export async function listRuns(input: TrackerInput) {
   const { config, device } = await trackerAndDevice(input);
-  const runs = (await SerpHistoryRepository.getCompletedRuns(config.id)).slice(
-    0,
+  const runs = await SerpHistoryRepository.getCompletedRuns(
+    config.id,
     MAX_LISTED_RUNS,
   );
   const saved = new Set(
@@ -52,26 +52,46 @@ export async function listRuns(input: TrackerInput) {
   };
 }
 
+/** How many of `keywords` each domain ranks for in the run's top 10. */
+function countDomains(
+  byDomain: Map<string, Set<string>> | undefined,
+  keywords?: Set<string>,
+) {
+  const counts = new Map<string, number>();
+  for (const [domain, ranked] of byDomain ?? []) {
+    counts.set(
+      domain,
+      keywords
+        ? [...ranked].filter((keyword) => keywords.has(keyword)).length
+        : ranked.size,
+    );
+  }
+  return counts;
+}
+
 /**
  * Per domain: in how many of the tracker's keywords it ranks in the top 10 at
- * each of the latest `runs` completed checks whose SERPs were saved.
+ * each of the latest `runs` completed checks whose SERPs were saved. The
+ * change and who entered or left compare only keywords saved in both of the
+ * last two checks, like getChanges, so an added keyword isn't a new entry.
  */
 export async function getCompetitors(input: TrackerInput & { runs: number }) {
   const { config, device } = await trackerAndDevice(input);
-  const latest = (
-    await SerpHistoryRepository.getCompletedRuns(config.id)
-  ).slice(0, input.runs);
-  const pageRows = await SerpHistoryRepository.getPages({
-    runIds: latest.map((run) => run.id),
-    device,
-  });
-  // Per run: the keywords whose page was saved, and each domain's keywords.
+  const latest = await SerpHistoryRepository.getCompletedRuns(
+    config.id,
+    input.runs,
+  );
+  const runIds = latest.map((run) => run.id);
+  const [savedRows, domainRows] = await Promise.all([
+    SerpHistoryRepository.getSavedKeywords(runIds, device),
+    SerpHistoryRepository.getTop10Domains(runIds, device),
+  ]);
   const saved = new Map<string, Set<string>>();
-  const ranking = new Map<string, Map<string, Set<string>>>();
-  for (const row of [...pageRows.results, ...pageRows.features]) {
+  for (const row of savedRows) {
     addTo(saved, row.runId, row.trackingKeywordId);
   }
-  for (const row of pageRows.results) {
+  const ranking = new Map<string, Map<string, Set<string>>>();
+  for (const row of domainRows) {
     if (!row.domain) continue;
     const byDomain = ranking.get(row.runId) ?? new Map<string, Set<string>>();
     ranking.set(row.runId, byDomain);
@@ -82,30 +102,46 @@ export async function getCompetitors(input: TrackerInput & { runs: number }) {
   const runs = reverse(latest.filter((run) => saved.has(run.id)));
   const counts = new Map<string, number[]>();
   runs.forEach((run, index) => {
-    for (const [domain, keywords] of ranking.get(run.id) ?? []) {
+    for (const [domain, count] of countDomains(ranking.get(run.id))) {
       const row = counts.get(domain) ?? runs.map(() => 0);
-      row[index] = keywords.size;
+      row[index] = count;
       counts.set(domain, row);
     }
   });
 
+  const [previousRun, lastRun] = runs.slice(-2);
+  const compared =
+    runs.length > 1
+      ? new Set(
+          [...(saved.get(lastRun.id) ?? [])].filter((keyword) =>
+            saved.get(previousRun.id)?.has(keyword),
+          ),
+        )
+      : null;
+  const comparedLast =
+    compared && countDomains(ranking.get(lastRun.id), compared);
+  const comparedPrevious =
+    compared && countDomains(ranking.get(previousRun.id), compared);
+
   const domains = sortBy(
     [...counts].map(([domain, perRun]) => {
-      const latestCount = perRun.at(-1) ?? 0;
-      const previous = perRun.length > 1 ? perRun[perRun.length - 2] : null;
+      const now = comparedLast?.get(domain) ?? 0;
+      const before = comparedPrevious
+        ? (comparedPrevious.get(domain) ?? 0)
+        : null;
       return {
         domain,
         own: isOwnSite(domain, config.domain),
         counts: perRun,
-        latest: latestCount,
-        change: previous === null ? null : latestCount - previous,
-        // Entered or left every tracked keyword's top 10 since the check before.
+        latest: perRun.at(-1) ?? 0,
+        change: before === null ? null : now - before,
+        // In no compared keyword's top 10 before, or in none now.
         status:
-          previous === null
+          before === null
             ? null
-            : previous === 0 && latestCount > 0
+            : before === 0 && now > 0
               ? ("entered" as const)
-              : previous > 0 && latestCount === 0
+              : before > 0 && now === 0
                 ? ("left" as const)
                 : null,
       };
@@ -123,6 +159,8 @@ export async function getCompetitors(input: TrackerInput & { runs: number }) {
       startedAt: run.startedAt,
       keywords: saved.get(run.id)?.size ?? 0,
     })),
+    // Keywords saved in both of the last two checks; null with one check.
+    comparedKeywords: compared?.size ?? null,
     // Checks in the window from before SERP history was saved.
     unsavedRuns: latest.length - runs.length,
     domains,
@@ -136,23 +174,26 @@ export async function getCompetitors(input: TrackerInput & { runs: number }) {
  */
 export async function getQuestionsAndSources(input: TrackerInput) {
   const { config, device } = await trackerAndDevice(input);
-  const [run] = await SerpHistoryRepository.getCompletedRuns(config.id);
+  const [run] = await SerpHistoryRepository.getCompletedRuns(config.id, 1);
   if (!run) {
     return { device, run: null, keywords: 0, questions: [], sources: [] };
   }
-  const [snapshots, pageRows] = await Promise.all([
+  const [snapshots, savedRows, features] = await Promise.all([
     SerpHistoryRepository.getSnapshots([run.id], device),
-    SerpHistoryRepository.getPages({ runIds: [run.id], device }),
+    SerpHistoryRepository.getSavedKeywords([run.id], device),
+    SerpHistoryRepository.getFeatureValues({
+      runId: run.id,
+      device,
+      featureTypes: ["people_also_ask", "ai_overview"],
+    }),
   ]);
   const keywordNames = new Map(
     snapshots.map((row) => [row.trackingKeywordId, row.keyword]),
   );
+  const savedKeywords = new Set(savedRows.map((row) => row.trackingKeywordId));
   const questions = new Map<string, Set<string>>();
   const sources = new Map<string, Set<string>>();
-  const savedKeywords = new Set<string>();
-  for (const row of pageRows.results) savedKeywords.add(row.trackingKeywordId);
-  for (const row of pageRows.features) {
-    savedKeywords.add(row.trackingKeywordId);
+  for (const row of features) {
     const keyword =
       keywordNames.get(row.trackingKeywordId) ?? row.trackingKeywordId;
     if (row.featureType === "people_also_ask" && row.value) {

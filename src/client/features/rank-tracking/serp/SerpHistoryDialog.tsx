@@ -52,7 +52,6 @@ export function SerpHistoryDialog({
         data: {
           ...props,
           trackingKeywordId: target.trackingKeywordId,
-          keyword: target.keyword,
         },
       }),
   });
@@ -95,10 +94,11 @@ export function SerpHistoryDialog({
 function SerpHistory({ checks, domain }: { checks: Check[]; domain: string }) {
   // Oldest on the left, like the history matrix.
   const columns = reverse(checks);
-  const [selected, setSelected] = useState(
-    checks.find((check) => check.saved)?.runId ?? checks[0].runId,
-  );
-  const selectedCheck = checks.find((check) => check.runId === selected);
+  const [selected, setSelected] = useState<string | null>(null);
+  // The picked check while it is still listed and saved, else the newest saved.
+  const selectedCheck =
+    checks.find((check) => check.saved && check.runId === selected) ??
+    checks.find((check) => check.saved);
 
   return (
     <div className="max-h-[70vh] space-y-4 overflow-y-auto">
@@ -115,14 +115,21 @@ function SerpHistory({ checks, domain }: { checks: Check[]; domain: string }) {
               <TableHead className="w-10 text-xs">#</TableHead>
               {columns.map((check) => (
                 <TableHead key={check.runId} className="min-w-36 text-xs">
-                  <button
-                    type="button"
-                    className={`text-left decoration-dotted underline-offset-2 hover:underline ${check.runId === selected ? "font-semibold text-foreground" : ""}`}
-                    onClick={() => setSelected(check.runId)}
-                    title="Show this check's SERP features"
-                  >
-                    {runDate(check.checkedAt)}
-                  </button>
+                  {check.saved ? (
+                    <button
+                      type="button"
+                      aria-pressed={check.runId === selectedCheck?.runId}
+                      className="text-left decoration-dotted underline-offset-2 hover:underline aria-pressed:font-semibold aria-pressed:text-foreground"
+                      onClick={() => setSelected(check.runId)}
+                      title="Show this check's SERP features"
+                    >
+                      {runDate(check.checkedAt)}
+                    </button>
+                  ) : (
+                    <span title="SERP features were not saved for this check.">
+                      {runDate(check.checkedAt)}
+                    </span>
+                  )}
                   <div className="font-normal text-muted-foreground">
                     You: {check.position ?? "not found"}
                   </div>
@@ -164,7 +171,7 @@ function SerpHistory({ checks, domain }: { checks: Check[]; domain: string }) {
           </TableBody>
         </Table>
       </div>
-      {selectedCheck?.saved && (
+      {selectedCheck && (
         <div className="rounded-lg border border-border">
           <p className="px-4 py-2 text-xs text-muted-foreground">
             {runDate(selectedCheck.checkedAt)} &middot; click a date above to

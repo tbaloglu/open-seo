@@ -65,11 +65,12 @@ export function PositionChange({
   const values = held
     ? [position.previous, position.from, position.to]
     : [position.from, position.to];
-  const before = values[values.length - 2];
+  // A held change happened between previous and from; to equals from.
+  const before = held ? position.previous : position.from;
   const tone =
     position.to === null
       ? "down"
-      : before === null || before === undefined || position.to < before
+      : before === null || position.to < before
         ? "up"
         : position.to > before
           ? "down"
