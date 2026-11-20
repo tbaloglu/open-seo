@@ -37,11 +37,10 @@ export function SearchArchiveSettings({ projectId }: { projectId: string }) {
     mutationFn: () =>
       startSearchArchive({ data: { projectId, mode: "backfill" } }),
     onSuccess: (result) => {
-      toast.success(
-        result.started
-          ? "Archiving started."
-          : "An archive run is already going.",
-      );
+      if (result.started) toast.success("Archiving started.");
+      else if (result.run?.status === "running")
+        toast.info("An archive run is already going.");
+      else toast.error("Couldn't start archiving. Try again.");
       void queryClient.invalidateQueries({ queryKey });
     },
     onError: (error) =>

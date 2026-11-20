@@ -129,7 +129,9 @@ describe("search archive run", () => {
       new GscTokenError("Grant revoked."),
     );
     const engine = engineStep();
-    await runSearchArchive(payload, engine.step);
+    await expect(runSearchArchive(payload, engine.step)).rejects.toThrow(
+      "Grant revoked.",
+    );
 
     expect(engine.errors).toHaveLength(1);
     expect(mocks.fetchPeriod).toHaveBeenCalledTimes(1);
@@ -150,6 +152,32 @@ describe("search archive run", () => {
     expect(engine.sleeps).toEqual([["gsc_site-2026-01-pause-0", 120_000]]);
     expect(engine.names).toContain("gsc_site-2026-01-after-quota-1");
     expect(mocks.fetchPeriod).toHaveBeenCalledTimes(3);
+  });
+
+  it("waits a full hour, at most, when GA4 names no usable wait", async () => {
+    mocks.fetchPeriod
+      .mockRejectedValueOnce(new Ga4ReportError("ga4_quota_exhausted", "q", 0))
+      .mockRejectedValueOnce(
+        new Ga4ReportError("ga4_quota_exhausted", "q", 7_200),
+      );
+    const engine = engineStep();
+    await runSearchArchive(payload, engine.step);
+
+    expect(engine.sleeps.map(([, duration]) => duration)).toEqual([
+      3_600_000, 3_600_000,
+    ]);
+  });
+
+  it("lets an interrupted sleep reach the engine without failing the run", async () => {
+    mocks.fetchPeriod.mockResolvedValueOnce({ rows: 5, pauseSeconds: 900 });
+    const interrupt = new Error("invocation cancelled");
+    const engine = engineStep();
+    engine.step.sleep = () => Promise.reject(interrupt);
+
+    await expect(runSearchArchive(payload, engine.step)).rejects.toBe(
+      interrupt,
+    );
+    expect(mocks.finishRun).not.toHaveBeenCalled();
   });
 });
 

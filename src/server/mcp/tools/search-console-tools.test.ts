@@ -231,6 +231,22 @@ describe("search console MCP tools", () => {
     expect(mocks.GscService.getPerformance).not.toHaveBeenCalled();
   });
 
+  it("rejects a range whose start is after its end, before checking Google's 16 months", async () => {
+    const { getSearchConsolePerformanceTool } = searchConsoleTools;
+
+    const result = await getSearchConsolePerformanceTool.handler(
+      {
+        projectId: "project_1",
+        startDate: "2020-03-01",
+        endDate: "2020-02-01",
+      },
+      toolContext,
+    );
+
+    expect(textContent(result)).toBe("startDate must be on or before endDate.");
+    expect(mocks.GscService.getPerformance).not.toHaveBeenCalled();
+  });
+
   it("rejects a half-specified explicit date range", async () => {
     const { getSearchConsolePerformanceTool } = searchConsoleTools;
 

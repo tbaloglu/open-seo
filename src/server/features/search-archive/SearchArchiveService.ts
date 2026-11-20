@@ -26,6 +26,12 @@ import { SearchArchiveRepository } from "./SearchArchiveRepository";
 // plans and tracks runs and reads the archive; archiveFetch.ts fetches.
 
 const STARTUP_GRACE_MS = 60_000;
+/**
+ * How long a run whose workflow still reports itself active may go on. A
+ * backfill that waits out GA4's quota month after month can pass the usual
+ * 12-hour stuck limit while healthy.
+ */
+const ACTIVE_RUN_LIMIT_MS = 48 * 60 * 60_000;
 
 export type ArchiveJobPayload = {
   projectId: string;
@@ -100,19 +106,22 @@ type Run = NonNullable<
 async function isRunActive(run: Run) {
   if (run.status !== "running") return false;
   const ageMs = Date.now() - Date.parse(run.startedAt);
-  if (ageMs > STUCK_RUN_AFTER_MS) return false;
   const status = await readWorkflowStatus(
     env.SEARCH_ARCHIVE_WORKFLOW,
     run.runId,
   );
-  if (status === null) return true;
+  // A failed lookup says nothing about the workflow.
+  if (status === null) return ageMs < STUCK_RUN_AFTER_MS;
   if (status === "missing") return ageMs < STARTUP_GRACE_MS;
-  return isWorkflowActive(status);
+  if (!isWorkflowActive(status)) return false;
+  // A run waiting out GA4's quota sleeps for hours, so a live workflow gets
+  // far longer than the usual stuck limit before it counts as stuck.
+  return ageMs < ACTIVE_RUN_LIMIT_MS;
 }
 
 /**
  * A run still marked running whose workflow stopped, or that has run past
- * STUCK_RUN_AFTER_MS: its workflow is terminated, so it can write no more,
+ * its limit: its workflow is terminated, so it can write no more,
  * and the run is marked failed. Returns the run as it now stands.
  */
 async function settleDeadRun(projectId: string, run: Run): Promise<Run> {

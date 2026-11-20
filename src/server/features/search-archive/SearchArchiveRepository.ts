@@ -1,4 +1,5 @@
 import { and, eq, gte, lte, max, min, ne, or, sql } from "drizzle-orm";
+import { omit } from "remeda";
 import { db } from "@/db";
 import { getDatabaseProvider } from "@/db/provider";
 import {
@@ -52,7 +53,8 @@ async function writeRows<T>(
   const perStatement =
     getDatabaseProvider() === "postgres"
       ? 1_000
-      : Math.floor(100 / columnsPerRow);
+      : // A few parameters short of D1's 100, as a margin.
+        Math.floor(96 / columnsPerRow);
   const groups = chunk(chunk(rows, perStatement), DB_BATCH_SIZE - 1);
   if (groups.length === 0 && clear) {
     await runBatch((tx) => [clear(tx)]);
@@ -339,7 +341,7 @@ async function claimRun(
     .values(values)
     .onConflictDoUpdate({
       target: searchArchiveRuns.projectId,
-      set: values,
+      set: omit(values, ["projectId"]),
       setWhere: replacing
         ? or(
             ne(searchArchiveRuns.status, "running"),

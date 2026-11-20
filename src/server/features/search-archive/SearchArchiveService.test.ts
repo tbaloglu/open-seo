@@ -71,8 +71,7 @@ const gscRow = (
   position,
 });
 
-// Nov 20 in UTC and in Pacific Time.
-const NOW = new Date("2026-11-20T12:00:00Z");
+const NOW = new Date("2026-11-20T12:00:00Z"); // Nov 20 in UTC and in PT
 
 const novemberPages = {
   source: "gsc_page" as const,
@@ -331,6 +330,20 @@ describe("search archive runs", () => {
       started: true,
       run: { status: "running", mode: "incremental" },
     });
+  });
+
+  it("keeps a healthy run that has been waiting out quotas for 13 hours", async () => {
+    const startedAt = new Date(Date.now() - 13 * 60 * 60_000).toISOString();
+    await testDb.client.execute({
+      sql: `INSERT INTO search_archive_runs (project_id, run_id, mode, status, started_at)
+        VALUES ('project', 'sleeping', 'backfill', 'running', ?)`,
+      args: [startedAt],
+    });
+    mocks.workflowStatus.mockResolvedValue({ status: "waiting" });
+
+    const { run } = await SearchArchiveService.getStatus("project");
+    expect(run).toMatchObject({ runId: "sleeping", status: "running" });
+    expect(mocks.terminateWorkflow).not.toHaveBeenCalled();
   });
 });
 

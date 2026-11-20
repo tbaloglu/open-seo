@@ -299,6 +299,9 @@ export const getSearchConsolePerformanceTool = {
 
     // A range wholly older than Google's 16 months would clamp to a start
     // after its end, which Google rejects (fork: the archive may have it).
+    if (args.startDate && args.endDate && args.startDate > args.endDate) {
+      return invalidRequest(meta, "startDate must be on or before endDate.");
+    }
     if (args.startDate && args.endDate) {
       const { startDate: floor } = resolveDateRange({
         startDate: args.startDate,

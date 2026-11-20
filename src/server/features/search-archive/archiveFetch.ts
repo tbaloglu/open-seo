@@ -18,7 +18,12 @@ import {
   createGa4DataClient,
   type Ga4RunReportRequest,
 } from "@/server/lib/ga4Client";
-import { archiveFloor, GSC_TIME_ZONE, type ArchiveFetch } from "./archivePlan";
+import {
+  addDays,
+  archiveFloor,
+  GSC_TIME_ZONE,
+  type ArchiveFetch,
+} from "./archivePlan";
 import { SearchArchiveRepository } from "./SearchArchiveRepository";
 
 // Fetches one month of one source for the search archive. It reads through
@@ -372,9 +377,8 @@ export async function fetchPeriod(
 
   if (fetch.source === "ga4_site" || fetch.source === "ga4_page") {
     const result = await fetchGa4(projectId, fetch);
-    if (result.truncated) warnTruncated(projectId, fetch);
     await record(
-      fetch.endDate,
+      coveredThrough(projectId, fetch, fetch.startDate, result.truncated),
       result.rows,
       fetch.complete && !result.truncated,
     );
@@ -395,13 +399,28 @@ export async function fetchPeriod(
     startDate,
     endDate: fetch.endDate,
   });
-  if (result.truncated) warnTruncated(projectId, fetch);
-  await record(fetch.endDate, result.rows, fetch.complete && !result.truncated);
+  await record(
+    coveredThrough(projectId, fetch, startDate, result.truncated),
+    result.rows,
+    fetch.complete && !result.truncated,
+  );
   return { rows: result.rows, pauseSeconds: 0 };
 }
 
-function warnTruncated(projectId: string, fetch: ArchiveFetch) {
+/**
+ * The last day the stored rows cover. Google sorts rows by clicks, not date,
+ * so a fetch cut off at MAX_PAGES covers no day for sure: it is recorded as
+ * ending before its start, and the next run reads the whole window again.
+ */
+function coveredThrough(
+  projectId: string,
+  fetch: ArchiveFetch,
+  startDate: string,
+  truncated: boolean,
+): string {
+  if (!truncated) return fetch.endDate;
   console.warn(
     `[search-archive] ${projectId} ${fetch.source} ${fetch.month}: stopped after ${MAX_PAGES} pages; the month stays incomplete.`,
   );
+  return addDays(startDate, -1);
 }

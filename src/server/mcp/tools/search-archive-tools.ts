@@ -38,6 +38,14 @@ const runOutputSchema = z
 
 type Run = z.infer<typeof runOutputSchema>;
 
+function startMessage(started: boolean, run: Run | null): string {
+  if (started) return "Archive run started.";
+  // A start racing this one won the slot, then may have failed to launch.
+  return run?.status === "running"
+    ? "An archive run is already going."
+    : "Another start just took the slot and did not get going; try again.";
+}
+
 function runLine(run: Run | null): string {
   if (!run) return "No archive run yet.";
   const finished = run.finishedAt ? `, finished ${run.finishedAt}` : "";
@@ -82,7 +90,7 @@ export const archiveSearchDataTool = {
       args.mode,
     );
     return mcpResponse({
-      text: `${started ? "Archive run started." : "An archive run is already going."} ${runLine(run)} Check progress with get_search_archive_status.`,
+      text: `${startMessage(started, run)} ${runLine(run)} Check progress with get_search_archive_status.`,
       meta: buildProjectMeta(
         context,
         args.projectId,
@@ -235,8 +243,9 @@ export const getArchivedSearchPerformanceTool = {
     const googleKeepsFrom = archiveFloor(
       ga4DateInTimeZone(new Date(), GSC_TIME_ZONE),
     );
+    // Only Search Console drops data at 16 months.
     const olderNote =
-      args.startDate < googleKeepsFrom
+      args.dataset.startsWith("gsc_") && args.startDate < googleKeepsFrom
         ? ` Google no longer has the days before ${googleKeepsFrom}; those come only from this archive.`
         : "";
     const header = `${args.dataset} from the archive, ${args.startDate} → ${args.endDate}: ${rows.length} row(s).${olderNote}${hasMore ? ` More: call again with offset=${nextOffset}.` : ""}`;
